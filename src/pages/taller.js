@@ -126,10 +126,6 @@ function showList(pedidos, searchTerm = '') {
   const entregados = pedidos.filter(p => p.estado_produccion === 'ENTREGADO');
 
   content.innerHTML = `
-    <div style="margin-bottom:12px; font-size:0.8rem; color:var(--text-tertiary);">
-      ${pedidos.length} pedido(s) — Haz clic en una tarjeta para ver el detalle
-    </div>
-    
     <div class="taller-columns">
       <!-- Columna Pendientes -->
       <div class="taller-column">

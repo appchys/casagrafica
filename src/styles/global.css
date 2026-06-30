@@ -426,6 +426,13 @@ a { color: var(--accent); text-decoration:none; }
 }
 .btn-success:hover { background: #008a47; box-shadow: 0 2px 10px rgba(0,168,84,0.3); transform: translateY(-1px); }
 
+.btn-info {
+  background: var(--info);
+  color: white;
+}
+.btn-info:hover { background: #1565c0; box-shadow: 0 2px 10px rgba(25,118,210,0.3); transform: translateY(-1px); }
+.btn-info:active { transform: translateY(0); }
+
 .btn-sm { padding: 6px 12px; font-size: 0.8rem; }
 .btn-xs { padding: 3px 10px; font-size: 0.75rem; border-radius: var(--radius-sm); }
 .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text-secondary); }
