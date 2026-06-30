@@ -3,12 +3,12 @@ import { getFirestore, enableIndexedDbPersistence } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
 
 export const firebaseConfig = {
-  apiKey: "AIzaSyD4UycOgtyvdV3JGq3k0oiQ2HTR8rs-X4s",
-  authDomain: "casa-grafica.firebaseapp.com",
-  projectId: "casa-grafica",
-  storageBucket: "casa-grafica.firebasestorage.app",
-  messagingSenderId: "271014582350",
-  appId: "1:271014582350:web:80243320b021baf36d8b1f"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID
 };
 
 const app = initializeApp(firebaseConfig);
