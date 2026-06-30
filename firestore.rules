@@ -1,0 +1,230 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: usuarios
+    // Document ID: Firebase Auth UID
+    // Fields:
+    //   - uid: string (required) - same as document ID
+    //   - email: string (required) - email address of the user
+    //   - nombre: string (required) - display name
+    //   - rol: string (required) - 'admin', 'diseño', 'taller'
+    //   - permisos: list of strings (required) - permissions array
+    //   - creado_en: timestamp (required) - creation time
+    //
+    // Collection: pedidos
+    // Document ID: Auto-generated UUID
+    // Fields:
+    //   - id_pedido: string (required, sequential 3-digit)
+    //   - cliente_id: string (required) - matches client document ID
+    //   - cliente_nombre: string (required)
+    //   - cliente_telefono: string (required)
+    //   - productos: list of maps (required)
+    //   - abonos: list of maps (required)
+    //   - total_pagar: number (required)
+    //   - total_abonado: number (required)
+    //   - saldo_pendiente: number (required)
+    //   - estado_pago: string (required)
+    //   - estado_produccion: string (required)
+    //   - fecha_creacion: timestamp (required)
+    //   - notas: string (optional)
+    //
+    // Collection: clientes
+    // Document ID: Auto-generated UUID
+    // Fields:
+    //   - nombre: string (required)
+    //   - nombre_lower: string (required)
+    //   - telefono: string (required)
+    //   - fecha_creacion: timestamp (required)
+    //   - updated_at: timestamp (required)
+    //   - total_pedidos: number (required)
+    //   - ruc: string (optional)
+    //   - email: string (optional)
+    //   - direccion: string (optional)
+    //
+    // Collection: productos_guardados
+    // Document ID: Auto-generated UUID
+    // Fields:
+    //   - producto_tipo: string (required)
+    //   - detalle_personalizado: string (optional)
+    //   - precio_unitario: number (required)
+    //   - fecha_creacion: timestamp (required)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isUserDoc(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Check if the current user is an admin
+    function isAdmin() {
+      return isAuthenticated() && 
+        exists(/databases/$(database)/documents/usuarios/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.rol == 'admin';
+    }
+
+    // Check if the user has a specific permission
+    function hasPermission(permission) {
+      return isAuthenticated() &&
+        exists(/databases/$(database)/documents/usuarios/$(request.auth.uid)) &&
+        permission in get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.permisos;
+    }
+
+    // Validate string size limits
+    function isValidString(val, maxLen) {
+      return val is string && val.size() <= maxLen;
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUsuario(data) {
+      return data.keys().hasAll(['uid', 'email', 'nombre', 'rol', 'permisos', 'creado_en']) &&
+             data.keys().hasOnly(['uid', 'email', 'nombre', 'rol', 'permisos', 'creado_en']) &&
+             isValidString(data.uid, 128) &&
+             isValidString(data.email, 128) &&
+             isValidString(data.nombre, 128) &&
+             data.nombre.size() > 0 &&
+             data.rol in ['admin', 'diseño', 'taller'] &&
+             data.permisos is list &&
+             data.creado_en is timestamp;
+    }
+
+    function isValidPedido(data) {
+      return data.keys().hasAll([
+        'id_pedido', 'cliente_id', 'cliente_nombre', 'cliente_telefono',
+        'productos', 'abonos', 'total_pagar', 'total_abonado',
+        'saldo_pendiente', 'estado_pago', 'estado_produccion', 'fecha_creacion'
+      ]) &&
+      data.keys().hasOnly([
+        'id_pedido', 'cliente_id', 'cliente_nombre', 'cliente_telefono',
+        'productos', 'abonos', 'total_pagar', 'total_abonado',
+        'saldo_pendiente', 'estado_pago', 'estado_produccion', 'fecha_creacion',
+        'notas', 'updated_at', 'default_estado_pago', 'historial_estados', 'fecha_entrega'
+      ]) &&
+      isValidString(data.id_pedido, 20) &&
+      isValidString(data.cliente_id, 128) &&
+      isValidString(data.cliente_nombre, 128) &&
+      isValidString(data.cliente_telefono, 32) &&
+      data.productos is list &&
+      data.abonos is list &&
+      data.total_pagar is number &&
+      data.total_abonado is number &&
+      data.saldo_pendiente is number &&
+      isValidString(data.estado_pago, 32) &&
+      isValidString(data.estado_produccion, 32) &&
+      data.fecha_creacion is timestamp &&
+      (!('notas' in data) || isValidString(data.notas, 2000)) &&
+      (!('updated_at' in data) || data.updated_at is timestamp) &&
+      (!('default_estado_pago' in data) || isValidString(data.default_estado_pago, 32)) &&
+      (!('historial_estados' in data) || data.historial_estados is list) &&
+      (!('fecha_entrega' in data) || data.fecha_entrega is timestamp || data.fecha_entrega == null);
+    }
+
+    function isValidCliente(data) {
+      return data.keys().hasAll(['nombre', 'nombre_lower', 'telefono', 'fecha_creacion', 'updated_at', 'total_pedidos']) &&
+             data.keys().hasOnly(['nombre', 'nombre_lower', 'telefono', 'fecha_creacion', 'updated_at', 'total_pedidos', 'ruc', 'email', 'direccion']) &&
+             isValidString(data.nombre, 128) &&
+             isValidString(data.nombre_lower, 128) &&
+             isValidString(data.telefono, 32) &&
+             data.fecha_creacion is timestamp &&
+             data.updated_at is timestamp &&
+             data.total_pedidos is number &&
+             (!('ruc' in data) || isValidString(data.ruc, 32)) &&
+             (!('email' in data) || isValidString(data.email, 128)) &&
+             (!('direccion' in data) || isValidString(data.direccion, 512));
+    }
+
+    // A product types string and basic validations
+    function isValidProductoGuardado(data) {
+      return data.keys().hasAll(['producto_tipo', 'precio_unitario', 'fecha_creacion']) &&
+             data.keys().hasOnly(['producto_tipo', 'detalle_personalizado', 'precio_unitario', 'fecha_creacion']) &&
+             isValidString(data.producto_tipo, 128) &&
+             data.precio_unitario is number &&
+             data.fecha_creacion is timestamp &&
+             (!('detalle_personalizado' in data) || isValidString(data.detalle_personalizado, 1000));
+    }
+
+    // ===============================================================
+    // Collection Rules
+    // ===============================================================
+
+    // Colección de usuarios
+    match /usuarios/{usuarioId} {
+      allow read: if isAuthenticated();
+
+      allow create: if isAuthenticated() && isValidUsuario(request.resource.data) && (
+        isAdmin() || 
+        (isUserDoc(usuarioId) && !exists(/databases/$(database)/documents/usuarios/$(usuarioId)))
+      );
+      
+      allow update: if isAuthenticated() && isValidUsuario(request.resource.data) && (
+        isAdmin() || (
+          isUserDoc(usuarioId) && 
+          request.resource.data.rol == resource.data.rol && 
+          request.resource.data.permisos == resource.data.permisos
+        )
+      );
+
+      allow delete: if isAdmin();
+    }
+
+    // Colección de pedidos — requiere autenticación y permisos adecuados
+    match /pedidos/{pedidoId} {
+      allow read: if isAuthenticated();
+      
+      allow create: if isAuthenticated() && isValidPedido(request.resource.data) && (
+        isAdmin() || hasPermission('crear_pedidos')
+      );
+
+      allow update: if isAuthenticated() && isValidPedido(request.resource.data) && (
+        isAdmin() || hasPermission('editar_pedidos') || hasPermission('gestionar_taller')
+      );
+
+      allow delete: if isAdmin();
+    }
+
+    // Colección de clientes
+    match /clientes/{clienteId} {
+      allow read: if isAuthenticated();
+      
+      allow create: if isAuthenticated() && isValidCliente(request.resource.data) && (
+        isAdmin() || hasPermission('crear_pedidos') || hasPermission('editar_pedidos')
+      );
+      
+      allow update: if isAuthenticated() && isValidCliente(request.resource.data) && (
+        isAdmin() || hasPermission('crear_pedidos') || hasPermission('editar_pedidos')
+      );
+
+      allow delete: if isAdmin();
+    }
+
+    // Colección de productos guardados
+    match /productos_guardados/{productoId} {
+      allow read: if isAuthenticated();
+      
+      allow create: if isAuthenticated() && isValidProductoGuardado(request.resource.data) && (
+        isAdmin() || hasPermission('crear_pedidos') || hasPermission('editar_pedidos')
+      );
+      
+      allow update: if isAuthenticated() && isValidProductoGuardado(request.resource.data) && (
+        isAdmin() || hasPermission('crear_pedidos') || hasPermission('editar_pedidos')
+      );
+
+      allow delete: if isAdmin();
+    }
+  }
+}
