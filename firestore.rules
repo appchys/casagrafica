@@ -166,6 +166,23 @@ service cloud.firestore {
              data.current_id >= 0;
     }
 
+    function isValidEgreso(data) {
+      return data.keys().hasAll(['descripcion', 'monto', 'metodo_pago', 'fecha']) &&
+             data.keys().hasOnly(['descripcion', 'monto', 'metodo_pago', 'fecha', 'usuario']) &&
+             isValidString(data.descripcion, 1000) &&
+             data.monto is number &&
+             data.monto > 0 &&
+             isValidString(data.metodo_pago, 32) &&
+             data.fecha is timestamp &&
+             (!('usuario' in data) || data.usuario == null || (
+               data.usuario.keys().hasAll(['uid', 'nombre', 'email']) &&
+               data.usuario.keys().hasOnly(['uid', 'nombre', 'email']) &&
+               isValidString(data.usuario.uid, 128) &&
+               isValidString(data.usuario.nombre, 128) &&
+               isValidString(data.usuario.email, 128)
+             ));
+    }
+
     // ===============================================================
     // Collection Rules
     // ===============================================================
@@ -241,6 +258,18 @@ service cloud.firestore {
       allow write: if isAuthenticated() && isValidConfig(configId, request.resource.data) && (
         isAdmin() || hasPermission('crear_pedidos')
       );
+    }
+
+    // Colección de egresos
+    match /egresos/{egresoId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidEgreso(request.resource.data) && (
+        isAdmin() || hasPermission('gestionar_caja')
+      );
+      allow update: if isAuthenticated() && isValidEgreso(request.resource.data) && (
+        isAdmin() || hasPermission('gestionar_caja')
+      );
+      allow delete: if isAdmin();
     }
   }
 }

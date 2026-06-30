@@ -43,6 +43,11 @@ export async function crearPedido({ cliente, productos, primerAbono, notas, usua
       fecha_pago: Timestamp.now(),
       monto: Number(primerAbono.monto),
       metodo_pago: primerAbono.metodo_pago || 'Efectivo',
+      usuario: usuario ? {
+        uid: usuario.uid || '',
+        nombre: usuario.nombre || '',
+        email: usuario.email || ''
+      } : null
     });
   }
 
@@ -152,6 +157,11 @@ export async function agregarAbono(docId, monto, metodo_pago, usuario) {
     fecha_pago: Timestamp.now(),
     monto: Number(monto),
     metodo_pago: metodo_pago || 'Efectivo',
+    usuario: usuario ? {
+      uid: usuario.uid || '',
+      nombre: usuario.nombre || '',
+      email: usuario.email || ''
+    } : null
   };
 
   const abonos = [...data.abonos, nuevoAbono];

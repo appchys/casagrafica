@@ -2189,7 +2189,7 @@ a { color: var(--accent); text-decoration:none; }
   background: var(--bg-app);
   border-radius: var(--radius-lg);
   padding: 16px;
-  border: 1px solid var(--border);
+  border: none;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -2217,6 +2217,11 @@ a { color: var(--accent); text-decoration:none; }
   font-weight: 700;
   padding: 2px 8px;
   border-radius: var(--radius-full);
+}
+
+.taller-column-count.has-items {
+  background: rgba(3, 150, 244, 0.15);
+  color: #0288d1;
 }
 
 .taller-column-body {
@@ -2349,6 +2354,29 @@ a { color: var(--accent); text-decoration:none; }
   background: var(--accent-subtle);
   color: var(--accent);
   font-weight: 700;
+}
+
+/* Colapso de columnas de estados en Taller y Pedidos */
+.taller-column.collapsed .taller-column-body {
+  display: none !important;
+}
+
+/* Ocultar acciones de tarjeta por defecto en escritorio, mostrar al hacer hover. En móviles se muestran siempre */
+@media (hover: hover) {
+  .pedido-card .btn-print-card,
+  .pedido-card .product-dropdown,
+  .pedido-card .pedido-card-wa-link {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--t-fast) ease-in-out;
+  }
+
+  .pedido-card:hover .btn-print-card,
+  .pedido-card:hover .product-dropdown,
+  .pedido-card:hover .pedido-card-wa-link {
+    opacity: 1;
+    pointer-events: auto;
+  }
 }
 
 

@@ -24,9 +24,9 @@
     padding: 0;
     background: white;
     color: black;
-    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     font-size: 11px;
-    line-height: 1.4;
+    line-height: 1.3;
   }
 
   /* Each receipt page */
@@ -34,6 +34,7 @@
     width: 72mm;
     padding: 4mm 2mm;
     page-break-after: always;
+    box-sizing: border-box;
   }
 
   .receipt-page:last-child {
@@ -42,170 +43,203 @@
 
   /* Header */
   .receipt-header {
-    text-align: center;
-    padding: 2mm 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    padding: 1mm 0 2mm;
   }
 
-  .receipt-logo {
-    font-size: 15px;
+  .receipt-logo-img {
+    height: 42px;
+    width: auto;
+    object-fit: contain;
+  }
+
+  .receipt-order-info {
+    text-align: right;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+  }
+
+  .receipt-order-label {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+    color: #000;
+    line-height: 1;
+  }
+
+  .receipt-order-number {
+    font-size: 26px;
     font-weight: 800;
-    letter-spacing: 1px;
-    text-transform: uppercase;
-  }
-
-  .receipt-subtitle {
-    font-size: 10px;
-    margin-top: 2px;
-    color: #444;
-    text-transform: uppercase;
-    font-weight: 600;
+    color: #000;
+    line-height: 1.1;
+    margin-top: 1px;
   }
 
   /* Dividers */
-  .receipt-divider {
-    border-top: 1px dotted #000;
-    margin: 2mm 0;
+  .receipt-divider-solid {
+    border-top: 1.2px solid #000;
+    margin: 3mm 0;
   }
 
-  .receipt-divider-double {
-    border-top: 1.5px double #000;
-    margin: 2mm 0;
-  }
-
-  /* Info rows */
-  .receipt-info {
+  /* Client Section */
+  .receipt-client-section {
     padding: 1mm 0;
+    text-align: left;
   }
 
-  .receipt-row {
+  .receipt-client-label {
+    font-size: 9px;
+    font-weight: 500;
+    color: #333;
+    letter-spacing: 0.5px;
+    margin-bottom: 0.5mm;
+  }
+
+  .receipt-client-name {
+    font-size: 14px;
+    font-weight: 800;
+    color: #000;
+    margin-bottom: 1mm;
+    text-transform: uppercase;
+  }
+
+  .receipt-date {
+    font-size: 9px;
+    font-weight: 500;
+    color: #000;
+  }
+
+  /* Products Section */
+  .receipt-products-section {
+    padding: 2mm 0;
+  }
+
+  .receipt-section-title-left {
+    font-size: 9px;
+    font-weight: 600;
+    color: #333;
+    letter-spacing: 0.5px;
+    margin-bottom: 3mm;
+    text-transform: uppercase;
+    text-align: left;
+  }
+
+  .receipt-products-list {
+    display: flex;
+    flex-direction: column;
+    gap: 3.5mm;
+  }
+
+  .receipt-product-item {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .receipt-product-main {
     display: flex;
     justify-content: space-between;
-    padding: 2px 0;
-    font-size: 11px;
+    align-items: flex-start;
+    font-size: 12px;
+    font-weight: 800;
+    color: #000;
   }
 
-  .receipt-row span:first-child {
-    color: #444;
-    font-weight: 500;
-  }
-
-  .receipt-row span:last-child, .receipt-row strong {
-    font-weight: 600;
-  }
-
-  /* Section titles */
-  .receipt-section-title {
-    font-weight: 700;
-    font-size: 10px;
-    text-align: center;
-    margin: 2mm 0;
-    letter-spacing: 1px;
+  .receipt-product-qty-name {
+    text-align: left;
     text-transform: uppercase;
-    color: #333;
+    padding-right: 2mm;
   }
 
-  /* Product table */
-  .receipt-table {
-    width: 100%;
-    border-collapse: collapse;
-  }
-
-  .receipt-table td {
-    vertical-align: top;
-    padding: 1.5mm 0;
-    font-size: 11px;
-    border-bottom: 1px dashed #f0f0f0;
-  }
-
-  .receipt-item-num {
-    width: 14px;
-    font-weight: bold;
-  }
-
-  .receipt-item-detail {
-    padding: 0 1.5mm;
-  }
-
-  .receipt-item-detail strong {
-    font-size: 11px;
-    font-weight: 700;
-  }
-
-  .receipt-item-desc {
-    font-size: 9.5px;
-    display: block;
-    max-width: 44mm;
-    word-wrap: break-word;
-    color: #333;
-    margin-top: 2px;
-  }
-
-  .receipt-item-meta {
-    font-size: 9.5px;
-    color: #444;
-    margin-top: 2px;
-    display: block;
-  }
-
-  .receipt-item-price {
-    text-align: right;
-    font-weight: 700;
+  .receipt-product-price {
     white-space: nowrap;
-    width: 60px;
+    text-align: right;
   }
 
-  /* Abonos table */
-  .receipt-table-abonos {
-    width: 100%;
-    border-collapse: collapse;
+  .receipt-product-details {
+    font-size: 9.5px;
+    font-weight: 700;
+    color: #000;
+    margin-top: 0.8mm;
+    padding-left: 5mm;
+    text-align: left;
+    white-space: pre-wrap;
+    line-height: 1.2;
+    text-transform: uppercase;
   }
 
-  .receipt-table-abonos td {
-    padding: 2px 0;
-    font-size: 10px;
-    vertical-align: middle;
-  }
-
-  /* Totals */
-  .receipt-totals {
+  /* Totals Section */
+  .receipt-totals-section {
+    display: flex;
+    flex-direction: column;
+    gap: 1.2mm;
     padding: 1mm 0;
   }
 
   .receipt-total-row {
     display: flex;
     justify-content: space-between;
-    padding: 2px 0;
-    font-size: 11px;
+    align-items: center;
+    font-size: 12px;
+    color: #000;
+    padding: 0.2mm 0;
   }
 
-  .receipt-total-row.has-saldo {
-    font-size: 12px;
-    font-weight: bold;
-    margin-top: 2mm;
-    padding: 2mm;
-    border: 1.5px solid #000;
-    text-align: center;
+  .receipt-total-label {
+    font-weight: 500;
   }
 
-  .receipt-total-row.paid {
-    font-size: 12px;
-    font-weight: bold;
-    margin-top: 2mm;
-    padding: 2mm;
-    border: 1.5px solid #000;
-    background: #fcfcfc;
+  .receipt-total-val {
+    font-weight: 600;
+    display: inline-flex;
+    justify-content: space-between;
+    width: 65px;
   }
 
-  .receipt-total-row.paid strong {
-    font-size: 12px;
+  /* Pending Box (Black background, white text) */
+  .receipt-pending-box {
+    background-color: #000 !important;
+    color: #fff !important;
+    padding: 1.5mm 2mm;
+    margin-top: 1mm;
+    font-weight: 800;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .receipt-pending-label {
+    font-weight: 800;
+    color: #fff !important;
+  }
+
+  .receipt-pending-val {
+    font-weight: 800;
+    color: #fff !important;
+    display: inline-flex;
+    justify-content: space-between;
+    width: 65px;
+  }
+
+  .currency-symbol {
+    text-align: left;
+  }
+
+  .currency-amount {
+    text-align: right;
+    flex-grow: 1;
   }
 
   /* Footer */
   .receipt-footer {
     text-align: center;
-    font-size: 10.5px;
-    font-weight: 600;
-    padding: 2mm 0;
+    font-size: 8.5px;
+    font-weight: 800;
+    line-height: 1.3;
+    margin-top: 4mm;
+    padding: 0 1mm;
+    text-transform: uppercase;
   }
 
   .receipt-copy-label {
@@ -217,56 +251,62 @@
     color: #333;
   }
 
-  /* Taller-specific */
-  .receipt-saldo-alert {
-    text-align: center;
-    font-size: 12px;
+  /* Paid Section */
+  .receipt-paid-section {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    padding: 1mm 0 2mm;
+  }
+
+  .receipt-paid-text {
+    font-size: 16px;
     font-weight: 800;
-    padding: 3mm;
-    border: 2px solid #000;
-    margin: 2mm 0;
+    color: #000;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
   }
 
-  .receipt-saldo-alert span {
-    font-size: 9.5px;
-    font-weight: 600;
-    display: block;
-    margin-top: 4px;
+  /* Workshop specific */
+  .receipt-taller-title {
+    text-align: left;
+    display: flex;
+    flex-direction: column;
+    line-height: 1;
   }
 
-  .receipt-pagado-alert {
-    text-align: center;
-    font-size: 12px;
-    font-weight: 800;
-    padding: 2.5mm;
-    border: 1.5px solid #000;
+  .receipt-taller-main {
+    font-size: 16px;
+    font-weight: 900;
+    color: #000;
+    letter-spacing: 0.5px;
   }
 
-  .receipt-produccion {
-    padding: 1mm 0;
-  }
-
-  .receipt-prod-item {
-    padding: 2mm 0;
-    border-bottom: 1px dashed #eee;
-  }
-
-  .receipt-prod-num {
-    font-weight: 700;
+  .receipt-taller-sub {
     font-size: 11px;
+    font-weight: 700;
+    color: #000;
+    letter-spacing: 1px;
+    margin-top: 1px;
   }
 
-  .receipt-prod-size {
-    font-size: 10px;
-    margin: 2px 0;
-    font-weight: 500;
+  .receipt-taller-saldo-alert {
+    text-align: center;
+    font-size: 11px;
+    font-weight: 800;
+    padding: 2mm;
+    border: 1.5px solid #000;
+    background-color: #f5f5f5 !important;
+    color: #000 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
   }
 
-  .receipt-prod-detail {
-    font-size: 10px;
-    padding-left: 2mm;
-    word-wrap: break-word;
-    color: #333;
+  .receipt-taller-saldo-warning {
+    display: block;
+    font-size: 9px;
+    font-weight: 700;
+    margin-top: 1mm;
   }
 
   .receipt-notes {
@@ -275,5 +315,7 @@
     border: 1px solid #000;
     word-wrap: break-word;
     background: #fafafc;
+    text-transform: uppercase;
+    font-weight: 600;
   }
 }

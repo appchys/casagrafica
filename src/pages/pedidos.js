@@ -33,6 +33,7 @@ let editingPedidoId = '';
 let deletePedidoId = '';
 let documentClickHandler = null;
 let unsubscribePedidos = null;
+let colapsados = { PENDIENTE: false, EN_PROCESO: false, ENTREGADO: true };
 
 function actualizarListadoProductosGuardados() {
   const savedSection = document.getElementById('saved-products-section');
@@ -186,7 +187,7 @@ export function renderPedidos() {
               <button class="filter-dropdown-item" data-filter="PARCIAL">Parcial</button>
               <button class="filter-dropdown-item" data-filter="PAGADO">Pagados</button>
               <button class="filter-dropdown-item" data-filter="PENDIENTE">Pendiente producción</button>
-              <button class="filter-dropdown-item" data-filter="EN PROCESO">En proceso</button>
+              <button class="filter-dropdown-item" data-filter="LISTO">Listo</button>
               <button class="filter-dropdown-item" data-filter="ENTREGADO">Entregados</button>
             </div>
           </div>
@@ -324,7 +325,8 @@ function renderFilteredList() {
     const matchFilter =
       filtroActivo === 'TODOS' ||
       p.estado_pago === filtroActivo ||
-      p.estado_produccion === filtroActivo;
+      p.estado_produccion === filtroActivo ||
+      (filtroActivo === 'LISTO' && p.estado_produccion === 'EN PROCESO');
 
     const matchSearch = !searchTerm ||
       p.cliente_nombre.toLowerCase().includes(searchTerm) ||
@@ -347,7 +349,7 @@ function renderFilteredList() {
 
   // Group by status
   const pendientes = filtered.filter(p => p.estado_produccion === 'PENDIENTE');
-  const enProceso  = filtered.filter(p => p.estado_produccion === 'EN PROCESO');
+  const listo      = filtered.filter(p => p.estado_produccion === 'LISTO' || p.estado_produccion === 'EN PROCESO');
 
   // Only show orders delivered today in the Entregadas column
   const startOfToday = new Date();
@@ -380,32 +382,44 @@ function renderFilteredList() {
   list.innerHTML = `
     <div class="taller-columns">
       <!-- Columna Pendientes -->
-      <div class="taller-column">
-        <div class="taller-column-header">
-          <span class="taller-column-title">Pendientes</span>
-          <span class="taller-column-count">${pendientes.length}</span>
+      <div class="taller-column ${colapsados.PENDIENTE ? 'collapsed' : ''}" data-estado="PENDIENTE">
+        <div class="taller-column-header" style="cursor:pointer; user-select:none;">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span class="taller-column-arrow" style="transition: transform var(--t-fast); display:inline-flex; font-size:0.75rem; color:var(--text-tertiary); transform: ${colapsados.PENDIENTE ? 'rotate(-90deg)' : 'none'};">▼</span>
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:14px; height:14px; color:var(--text-tertiary);"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+            <span class="taller-column-title">Pendientes</span>
+          </div>
+          <span class="taller-column-count ${pendientes.length > 0 ? 'has-items' : ''}">${pendientes.length}</span>
         </div>
         <div class="taller-column-body">
           ${pendientes.map(p => renderPedidoCard(p)).join('') || '<div class="taller-empty-column">Sin pedidos</div>'}
         </div>
       </div>
 
-      <!-- Columna En Proceso -->
-      <div class="taller-column">
-        <div class="taller-column-header">
-          <span class="taller-column-title">En proceso</span>
-          <span class="taller-column-count">${enProceso.length}</span>
+      <!-- Columna Listo -->
+      <div class="taller-column ${colapsados.LISTO ? 'collapsed' : ''}" data-estado="LISTO">
+        <div class="taller-column-header" style="cursor:pointer; user-select:none;">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span class="taller-column-arrow" style="transition: transform var(--t-fast); display:inline-flex; font-size:0.75rem; color:var(--text-tertiary); transform: ${colapsados.LISTO ? 'rotate(-90deg)' : 'none'};">▼</span>
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:14px; height:14px; color:var(--success-text);"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+            <span class="taller-column-title">Listo</span>
+          </div>
+          <span class="taller-column-count ${listo.length > 0 ? 'has-items' : ''}">${listo.length}</span>
         </div>
         <div class="taller-column-body">
-          ${enProceso.map(p => renderPedidoCard(p)).join('') || '<div class="taller-empty-column">Sin pedidos</div>'}
+          ${listo.map(p => renderPedidoCard(p)).join('') || '<div class="taller-empty-column">Sin pedidos</div>'}
         </div>
       </div>
 
       <!-- Columna Entregadas -->
-      <div class="taller-column">
-        <div class="taller-column-header">
-          <span class="taller-column-title">Entregadas</span>
-          <span class="taller-column-count">${entregados.length}</span>
+      <div class="taller-column ${colapsados.ENTREGADO ? 'collapsed' : ''}" data-estado="ENTREGADO">
+        <div class="taller-column-header" style="cursor:pointer; user-select:none;">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span class="taller-column-arrow" style="transition: transform var(--t-fast); display:inline-flex; font-size:0.75rem; color:var(--text-tertiary); transform: ${colapsados.ENTREGADO ? 'rotate(-90deg)' : 'none'};">▼</span>
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:14px; height:14px; color:var(--accent);"><polyline points="21 16 12 21 3 16 3 8 12 3 21 8 21 16"></polyline><polyline points="3 8 12 13 21 8"></polyline><line x1="12" y1="13" x2="12" y2="21"></line></svg>
+            <span class="taller-column-title">Entregadas hoy</span>
+          </div>
+          <span class="taller-column-count ${entregados.length > 0 ? 'has-items' : ''}">${entregados.length}</span>
         </div>
         <div class="taller-column-body">
           ${entregados.map(p => renderPedidoCard(p)).join('') || '<div class="taller-empty-column">Sin pedidos</div>'}
@@ -413,6 +427,22 @@ function renderFilteredList() {
       </div>
     </div>
   `;
+
+  // Bind click to headers to collapse columns
+  list.querySelectorAll('.taller-column-header').forEach(header => {
+    header.addEventListener('click', () => {
+      const col = header.closest('.taller-column');
+      const estado = col.dataset.estado;
+      const arrow = header.querySelector('.taller-column-arrow');
+      
+      colapsados[estado] = !colapsados[estado];
+      col.classList.toggle('collapsed', colapsados[estado]);
+      
+      if (arrow) {
+        arrow.style.transform = colapsados[estado] ? 'rotate(-90deg)' : 'none';
+      }
+    });
+  });
 
   // Bind click to each card → navigate to taller with this pedido
   list.querySelectorAll('.pedido-card').forEach(card => {
@@ -904,6 +934,28 @@ export function bindPedidosEvents() {
   const modalContainer = document.getElementById('app-modal-container');
   if (modalContainer) {
     modalContainer.addEventListener('input', (e) => {
+      // 1. Manejo del input de Total del producto (cálculo inverso)
+      if (e.target.id === 'modal-product-total') {
+        const qtyInput = modalContainer.querySelector('#modal-product-qty');
+        const priceInput = modalContainer.querySelector('#modal-product-price');
+        const totalVal = parseFloat(e.target.value) || 0;
+        const qtyVal = parseInt(qtyInput?.value) || 1;
+
+        const calculatedPrice = totalVal > 0 ? Number((totalVal / qtyVal).toFixed(4)) : 0;
+        
+        if (priceInput) {
+          priceInput.value = calculatedPrice > 0 ? calculatedPrice : '';
+        }
+        if (tempProduct) {
+          tempProduct.precio_unitario = calculatedPrice > 0 ? calculatedPrice : '';
+        }
+        
+        // Actualizar el subtotal de abajo
+        updateModalSubtotal(totalVal);
+        return;
+      }
+
+      // 2. Manejo de inputs estándar (.temp-product-field)
       const fieldEl = e.target.closest('.temp-product-field');
       if (fieldEl) {
         const fieldName = fieldEl.dataset.field;
@@ -919,24 +971,17 @@ export function bindPedidosEvents() {
           tempProduct[fieldName] = value;
         }
         
-        // Recalculate subtotal inside modal
-        if (fieldName === 'cantidad' || fieldName === 'precio_unitario') {
-          const qty = Number(modalContainer.querySelector('.temp-product-field[data-field="cantidad"]')?.value) || 0;
-          const price = Number(modalContainer.querySelector('.temp-product-field[data-field="precio_unitario"]')?.value) || 0;
-          const sub = qty * price;
-          
-          const displayEl = document.getElementById('temp-product-subtotal');
-          const amountEl = document.getElementById('temp-subtotal-display');
-          
-          if (displayEl && amountEl) {
-            if (sub > 0) {
-              displayEl.style.display = 'block';
-              amountEl.textContent = formatCurrency(sub);
-            } else {
-              displayEl.style.display = 'none';
-            }
-          }
+        // Recalcular Total e inyectarlo en el input de Total del producto
+        const qtyVal = parseInt(modalContainer.querySelector('#modal-product-qty')?.value) || 1;
+        const priceVal = parseFloat(modalContainer.querySelector('#modal-product-price')?.value) || 0;
+        const totalInput = modalContainer.querySelector('#modal-product-total');
+        
+        const sub = qtyVal * priceVal;
+        if (totalInput) {
+          totalInput.value = sub > 0 ? Number(sub.toFixed(2)) : '';
         }
+        
+        updateModalSubtotal(sub);
       }
     });
 
@@ -1015,16 +1060,18 @@ export function bindPedidosEvents() {
           if (tipoInput) tipoInput.value = sp.producto_tipo;
           if (detalleInput) detalleInput.value = sp.detalle_personalizado || '';
           if (precioInput) precioInput.value = sp.precio_unitario > 0 ? sp.precio_unitario : '';
+          
           // Trigger subtotal recalculation
           const qty = Number(modalContainer.querySelector('.temp-product-field[data-field="cantidad"]')?.value) || 1;
           const price = Number(sp.precio_unitario) || 0;
           const sub = qty * price;
-          const displayEl = document.getElementById('temp-product-subtotal');
-          const amountEl = document.getElementById('temp-subtotal-display');
-          if (displayEl && amountEl) {
-            if (sub > 0) { displayEl.style.display = 'block'; amountEl.textContent = formatCurrency(sub); }
-            else { displayEl.style.display = 'none'; }
+          
+          const totalInput = modalContainer.querySelector('#modal-product-total');
+          if (totalInput) {
+            totalInput.value = sub > 0 ? Number(sub.toFixed(2)) : '';
           }
+          
+          updateModalSubtotal(sub);
           
           // Programmatically switch back to Nuevo Producto tab
           const newTabBtn = modalContainer.querySelector('.modal-tab-btn[data-tab="new-product"]');
@@ -1593,5 +1640,19 @@ export function cleanupPedidos() {
   if (unsubscribePedidos) {
     unsubscribePedidos();
     unsubscribePedidos = null;
+  }
+}
+
+function updateModalSubtotal(sub) {
+  const displayEl = document.getElementById('temp-product-subtotal');
+  const amountEl = document.getElementById('temp-subtotal-display');
+  
+  if (displayEl && amountEl) {
+    if (sub > 0) {
+      displayEl.style.display = 'block';
+      amountEl.textContent = formatCurrency(sub);
+    } else {
+      displayEl.style.display = 'none';
+    }
   }
 }

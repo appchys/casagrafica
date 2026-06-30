@@ -8,6 +8,7 @@ import { renderPedidos, bindPedidosEvents, cleanupPedidos } from './pages/pedido
 import { renderTaller, bindTallerEvents, cleanupTaller } from './pages/taller.js';
 import { renderUsuarios, bindUsuariosEvents, cleanupUsuarios } from './pages/usuarios.js';
 import { renderHistorial, bindHistorialEvents, cleanupHistorial } from './pages/historial.js';
+import { renderCaja, bindCajaEvents, cleanupCaja } from './pages/caja.js';
 import { obtenerUsuario } from './services/usuarios.service.js';
 
 const app = document.getElementById('app');
@@ -125,6 +126,9 @@ function getRoute() {
   if (path.startsWith('/historial')) {
     return { page: 'historial', docId: null };
   }
+  if (path.startsWith('/caja')) {
+    return { page: 'caja', docId: null };
+  }
   return { page: 'pedidos', docId: null };
 }
 
@@ -143,6 +147,8 @@ function renderPage(user, profile) {
     authorized = permissions.includes('gestionar_taller');
   } else if (page === 'usuarios') {
     authorized = permissions.includes('gestionar_usuarios');
+  } else if (page === 'caja') {
+    authorized = permissions.includes('gestionar_caja');
   }
 
   // Redireccionar si no está autorizado
@@ -157,6 +163,10 @@ function renderPage(user, profile) {
       return;
     } else if (permissions.includes('gestionar_usuarios')) {
       history.replaceState(null, '', '/usuarios');
+      renderPage(user, profile);
+      return;
+    } else if (permissions.includes('gestionar_caja')) {
+      history.replaceState(null, '', '/caja');
       renderPage(user, profile);
       return;
     } else {
@@ -183,6 +193,8 @@ function renderPage(user, profile) {
     content = renderUsuarios();
   } else if (page === 'historial') {
     content = renderHistorial();
+  } else if (page === 'caja') {
+    content = renderCaja();
   } else {
     content = renderPedidos();
   }
@@ -202,6 +214,9 @@ function renderPage(user, profile) {
   } else if (page === 'historial') {
     bindHistorialEvents();
     currentCleanup = cleanupHistorial;
+  } else if (page === 'caja') {
+    bindCajaEvents();
+    currentCleanup = cleanupCaja;
   } else {
     bindPedidosEvents();
     currentCleanup = cleanupPedidos;
@@ -236,7 +251,7 @@ onAuthStateChanged(auth, async (user) => {
       email: 'dev@casagrafica.com',
       nombre: 'Desarrollador',
       rol: 'admin',
-      permisos: ['crear_pedidos', 'editar_pedidos', 'gestionar_taller', 'gestionar_usuarios']
+      permisos: ['crear_pedidos', 'editar_pedidos', 'gestionar_taller', 'gestionar_usuarios', 'gestionar_caja']
     };
     if (window.location.pathname === '/' || window.location.pathname === '') {
       history.replaceState(null, '', '/pedidos');

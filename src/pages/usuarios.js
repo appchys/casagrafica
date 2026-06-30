@@ -135,6 +135,10 @@ export function renderUsuarios() {
                 <input type="checkbox" id="perm-gestionar-usuarios" />
                 <span>Gestionar Usuarios & Permisos</span>
               </label>
+              <label class="checkbox-item">
+                <input type="checkbox" id="perm-gestionar-caja" />
+                <span>Gestionar Caja</span>
+              </label>
             </div>
           </div>
         </form>
@@ -277,6 +281,7 @@ function openEditUser(uid) {
   document.getElementById('perm-editar-pedidos').checked = permisos.includes('editar_pedidos');
   document.getElementById('perm-gestionar-taller').checked = permisos.includes('gestionar_taller');
   document.getElementById('perm-gestionar-usuarios').checked = permisos.includes('gestionar_usuarios');
+  document.getElementById('perm-gestionar-caja').checked = permisos.includes('gestionar_caja');
 
   openSidebar();
 }
@@ -286,24 +291,28 @@ function applyDefaultPermissions(rol) {
   const pEditar = document.getElementById('perm-editar-pedidos');
   const pTaller = document.getElementById('perm-gestionar-taller');
   const pUsuarios = document.getElementById('perm-gestionar-usuarios');
+  const pCaja = document.getElementById('perm-gestionar-caja');
 
-  if (!pCrear || !pEditar || !pTaller || !pUsuarios) return;
+  if (!pCrear || !pEditar || !pTaller || !pUsuarios || !pCaja) return;
 
   if (rol === 'admin') {
     pCrear.checked = true;
     pEditar.checked = true;
     pTaller.checked = true;
     pUsuarios.checked = true;
+    pCaja.checked = true;
   } else if (rol === 'diseño') {
     pCrear.checked = true;
     pEditar.checked = true;
     pTaller.checked = false;
     pUsuarios.checked = false;
+    pCaja.checked = false;
   } else if (rol === 'taller') {
     pCrear.checked = false;
     pEditar.checked = false;
     pTaller.checked = true;
     pUsuarios.checked = false;
+    pCaja.checked = false;
   }
 }
 
@@ -355,6 +364,7 @@ async function loadUsers() {
         else if (p === 'editar_pedidos') label = 'Editar Pedidos';
         else if (p === 'gestionar_taller') label = 'Taller';
         else if (p === 'gestionar_usuarios') label = 'Usuarios';
+        else if (p === 'gestionar_caja') label = 'Caja';
         return `<span class="permiso-tag">${label}</span>`;
       }).join('');
 
@@ -416,6 +426,7 @@ async function handleSaveUser() {
   if (document.getElementById('perm-editar-pedidos').checked) permisos.push('editar_pedidos');
   if (document.getElementById('perm-gestionar-taller').checked) permisos.push('gestionar_taller');
   if (document.getElementById('perm-gestionar-usuarios').checked) permisos.push('gestionar_usuarios');
+  if (document.getElementById('perm-gestionar-caja').checked) permisos.push('gestionar_caja');
 
   if (editingUid === null) {
     // Creating user: require password

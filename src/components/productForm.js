@@ -84,16 +84,21 @@ export function renderProductForm(product, isEditing = false, existingTypes = []
               placeholder="Descripción del diseño, colores, texto, acabados..." rows="3">${escapeHtml(product.detalle_personalizado || '')}</textarea>
           </div>
 
-          <div class="form-row">
-            <div class="form-group">
+          <div class="form-row" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;">
+            <div class="form-group" style="margin: 0;">
               <label class="form-label form-required">Cantidad</label>
               <input type="number" class="form-input form-mono temp-product-field" data-field="cantidad"
-                min="1" step="1" value="${qty}" />
+                id="modal-product-qty" min="1" step="1" value="${qty}" />
             </div>
-            <div class="form-group">
+            <div class="form-group" style="margin: 0;">
               <label class="form-label form-required">Precio Unit.</label>
               <input type="number" class="form-input form-mono temp-product-field" data-field="precio_unitario"
-                min="0" step="0.01" placeholder="0.00" value="${price > 0 ? price : ''}" />
+                id="modal-product-price" min="0" step="0.01" placeholder="0.00" value="${price > 0 ? price : ''}" />
+            </div>
+            <div class="form-group" style="margin: 0;">
+              <label class="form-label">Total</label>
+              <input type="number" class="form-input form-mono" id="modal-product-total"
+                min="0" step="0.01" placeholder="0.00" value="${subtotal > 0 ? subtotal.toFixed(2) : ''}" />
             </div>
           </div>
 

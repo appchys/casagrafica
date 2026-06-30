@@ -8,6 +8,7 @@ export function renderNavbar(currentPage, userEmail, permissions = [], userName 
   const showPedidos = permissions.includes('crear_pedidos') || permissions.includes('editar_pedidos');
   const showTaller = permissions.includes('gestionar_taller');
   const showUsuarios = permissions.includes('gestionar_usuarios');
+  const showCaja = permissions.includes('gestionar_caja');
 
   return `
     <nav class="navbar" id="main-navbar">
@@ -21,7 +22,7 @@ export function renderNavbar(currentPage, userEmail, permissions = [], userName 
       </button>
 
       <a class="navbar-brand" href="/pedidos">
-        <div class="brand-mark">CG</div>
+        <img src="/logoblanco.png" alt="CG" style="height:32px; width:auto; object-fit:contain;" />
         <span>Casa <span class="brand-sub">Gráfica</span></span>
       </a>
     </nav>
@@ -31,7 +32,7 @@ export function renderNavbar(currentPage, userEmail, permissions = [], userName 
     <div class="mobile-menu-drawer" id="mobile-menu-drawer">
       <div class="drawer-header">
         <a class="navbar-brand" href="/pedidos">
-          <div class="brand-mark">CG</div>
+          <img src="/logoblanco.png" alt="CG" style="height:32px; width:auto; object-fit:contain;" />
           <span>Casa <span class="brand-sub">Gráfica</span></span>
         </a>
         <button class="menu-close" id="menu-close" aria-label="Cerrar menú" type="button">
@@ -68,6 +69,20 @@ export function renderNavbar(currentPage, userEmail, permissions = [], userName 
               <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 20h20"></path><path d="M5 17V8l4-4v13"></path><path d="M9 17v-6l4-3v9"></path><path d="M13 17v-8l4-4v12"></path><path d="M17 17v-4l4-3v7"></path></svg>
             </span>
             <span class="nav-label">Taller & Entrega</span>
+          </a>
+        </li>
+        ` : ''}
+        ${showCaja ? `
+        <li>
+          <a href="/caja" class="drawer-nav-item ${currentPage === 'caja' ? 'active' : ''}">
+            <span class="nav-icon" style="display:inline-flex; align-items:center;">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="2" y="6" width="20" height="12" rx="2"></rect>
+                <circle cx="12" cy="12" r="2"></circle>
+                <path d="M6 12h.01M18 12h.01"></path>
+              </svg>
+            </span>
+            <span class="nav-label">Caja</span>
           </a>
         </li>
         ` : ''}

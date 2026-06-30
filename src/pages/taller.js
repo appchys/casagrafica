@@ -9,6 +9,7 @@ import { imprimirRecibo } from '../services/print.service.js';
 import { showToast, getCurrentUserProfile } from '../main.js';
 
 let unsubscribe = null;
+let colapsados = { PENDIENTE: false, LISTO: false, ENTREGADO: true };
 
 /**
  * Render Taller & Entrega page
@@ -122,38 +123,50 @@ function showList(pedidos, searchTerm = '') {
 
   // Group by status
   const pendientes = pedidos.filter(p => p.estado_produccion === 'PENDIENTE');
-  const enProceso  = pedidos.filter(p => p.estado_produccion === 'EN PROCESO');
+  const listo      = pedidos.filter(p => p.estado_produccion === 'LISTO' || p.estado_produccion === 'EN PROCESO');
   const entregados = pedidos.filter(p => p.estado_produccion === 'ENTREGADO');
 
   content.innerHTML = `
     <div class="taller-columns">
       <!-- Columna Pendientes -->
-      <div class="taller-column">
-        <div class="taller-column-header">
-          <span class="taller-column-title">Pendientes</span>
-          <span class="taller-column-count">${pendientes.length}</span>
+      <div class="taller-column ${colapsados.PENDIENTE ? 'collapsed' : ''}" data-estado="PENDIENTE">
+        <div class="taller-column-header" style="cursor:pointer; user-select:none;">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span class="taller-column-arrow" style="transition: transform var(--t-fast); display:inline-flex; font-size:0.75rem; color:var(--text-tertiary); transform: ${colapsados.PENDIENTE ? 'rotate(-90deg)' : 'none'};">▼</span>
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:14px; height:14px; color:var(--text-tertiary);"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+            <span class="taller-column-title">Pendientes</span>
+          </div>
+          <span class="taller-column-count ${pendientes.length > 0 ? 'has-items' : ''}">${pendientes.length}</span>
         </div>
         <div class="taller-column-body">
           ${pendientes.map(p => renderPedidoCard(p, { showTallerActions: true })).join('') || '<div class="taller-empty-column">Sin pedidos</div>'}
         </div>
       </div>
 
-      <!-- Columna En Proceso -->
-      <div class="taller-column">
-        <div class="taller-column-header">
-          <span class="taller-column-title">En proceso</span>
-          <span class="taller-column-count">${enProceso.length}</span>
+      <!-- Columna Listo -->
+      <div class="taller-column ${colapsados.LISTO ? 'collapsed' : ''}" data-estado="LISTO">
+        <div class="taller-column-header" style="cursor:pointer; user-select:none;">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span class="taller-column-arrow" style="transition: transform var(--t-fast); display:inline-flex; font-size:0.75rem; color:var(--text-tertiary); transform: ${colapsados.LISTO ? 'rotate(-90deg)' : 'none'};">▼</span>
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:14px; height:14px; color:var(--success-text);"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+            <span class="taller-column-title">Listo</span>
+          </div>
+          <span class="taller-column-count ${listo.length > 0 ? 'has-items' : ''}">${listo.length}</span>
         </div>
         <div class="taller-column-body">
-          ${enProceso.map(p => renderPedidoCard(p, { showTallerActions: true })).join('') || '<div class="taller-empty-column">Sin pedidos</div>'}
+          ${listo.map(p => renderPedidoCard(p, { showTallerActions: true })).join('') || '<div class="taller-empty-column">Sin pedidos</div>'}
         </div>
       </div>
 
       <!-- Columna Entregadas -->
-      <div class="taller-column">
-        <div class="taller-column-header">
-          <span class="taller-column-title">Entregadas</span>
-          <span class="taller-column-count">${entregados.length}</span>
+      <div class="taller-column ${colapsados.ENTREGADO ? 'collapsed' : ''}" data-estado="ENTREGADO">
+        <div class="taller-column-header" style="cursor:pointer; user-select:none;">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span class="taller-column-arrow" style="transition: transform var(--t-fast); display:inline-flex; font-size:0.75rem; color:var(--text-tertiary); transform: ${colapsados.ENTREGADO ? 'rotate(-90deg)' : 'none'};">▼</span>
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:14px; height:14px; color:var(--accent);"><polyline points="21 16 12 21 3 16 3 8 12 3 21 8 21 16"></polyline><polyline points="3 8 12 13 21 8"></polyline><line x1="12" y1="13" x2="12" y2="21"></line></svg>
+            <span class="taller-column-title">Entregadas hoy</span>
+          </div>
+          <span class="taller-column-count ${entregados.length > 0 ? 'has-items' : ''}">${entregados.length}</span>
         </div>
         <div class="taller-column-body">
           ${entregados.map(p => renderPedidoCard(p, { showTallerActions: true })).join('') || '<div class="taller-empty-column">Sin pedidos</div>'}
@@ -161,6 +174,22 @@ function showList(pedidos, searchTerm = '') {
       </div>
     </div>
   `;
+
+  // Bind click to headers to collapse columns
+  content.querySelectorAll('.taller-column-header').forEach(header => {
+    header.addEventListener('click', () => {
+      const col = header.closest('.taller-column');
+      const estado = col.dataset.estado;
+      const arrow = header.querySelector('.taller-column-arrow');
+      
+      colapsados[estado] = !colapsados[estado];
+      col.classList.toggle('collapsed', colapsados[estado]);
+      
+      if (arrow) {
+        arrow.style.transform = colapsados[estado] ? 'rotate(-90deg)' : 'none';
+      }
+    });
+  });
 
   content.querySelectorAll('.pedido-card').forEach(card => {
     card.addEventListener('click', (e) => {
@@ -226,7 +255,7 @@ function renderDetail(pedido) {
 
   const isPaid = pedido.saldo_pendiente <= 0;
   const isEntregado = pedido.estado_produccion === 'ENTREGADO';
-  const estados = ['PENDIENTE', 'EN PROCESO', 'ENTREGADO'];
+  const estados = ['PENDIENTE', 'LISTO', 'ENTREGADO'];
 
   const productRows = pedido.productos.map((p, i) => `
     <tr>
@@ -475,8 +504,8 @@ function showAbonoModal(pedido) {
 async function handleCardAction(pedido, action) {
   if (action === 'comenzar') {
     try {
-      await actualizarEstadoProduccion(pedido._docId, 'EN PROCESO', getCurrentUserProfile());
-      showToast('Pedido marcado en proceso', 'success');
+      await actualizarEstadoProduccion(pedido._docId, 'LISTO', getCurrentUserProfile());
+      showToast('Pedido marcado como listo', 'success');
     } catch (err) {
       showToast('Error: ' + err.message, 'error');
     }
