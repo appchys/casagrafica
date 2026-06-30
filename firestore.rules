@@ -158,6 +158,14 @@ service cloud.firestore {
              (!('detalle_personalizado' in data) || isValidString(data.detalle_personalizado, 1000));
     }
 
+    function isValidConfig(configId, data) {
+      return configId == 'pedidos_counter' &&
+             data.keys().hasAll(['current_id']) &&
+             data.keys().hasOnly(['current_id']) &&
+             data.current_id is int &&
+             data.current_id >= 0;
+    }
+
     // ===============================================================
     // Collection Rules
     // ===============================================================
@@ -225,6 +233,14 @@ service cloud.firestore {
       );
 
       allow delete: if isAdmin();
+    }
+
+    // Colección de configuraciones del sistema (ej. contador de pedidos)
+    match /config/{configId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && isValidConfig(configId, request.resource.data) && (
+        isAdmin() || hasPermission('crear_pedidos')
+      );
     }
   }
 }

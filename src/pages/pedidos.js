@@ -5,7 +5,7 @@ import { formatCurrency, formatDate } from '../utils/formatters.js';
 import { crearPedido, actualizarPedido, obtenerPedido, obtenerPedidosRecientes, obtenerTiposProducto, eliminarPedido, escucharPedidosRecientes } from '../services/pedidos.service.js';
 import { guardarProducto, obtenerProductosGuardados, eliminarProductoGuardado } from '../services/productosGuardados.service.js';
 import { guardarCliente, obtenerCliente } from '../services/clientes.service.js';
-import { imprimirRecibo } from '../services/print.service.js';
+import { imprimirRecibo, imprimirReciboDirecto } from '../services/print.service.js';
 import { showToast, getCurrentUserProfile } from '../main.js';
 import { renderPedidoCard } from '../components/pedidoCard.js';
 import { renderClienteSearch, bindClienteSearch, clienteState, resetClienteState } from '../components/clienteSearch.js';
@@ -1561,8 +1561,8 @@ async function handleSave() {
         usuario: getCurrentUserProfile(),
       });
       closeSidebar();
-      showSuccessOverlay(savedPedido);
-      setTimeout(() => imprimirRecibo(savedPedido), 600);
+      showToast('Pedido creado', 'success');
+      imprimirReciboDirecto(savedPedido);
     }
 
     // Reset sidebar after a delay
@@ -1580,26 +1580,7 @@ async function handleSave() {
   }
 }
 
-function showSuccessOverlay(pedido) {
-  const el = document.createElement('div');
-  el.className = 'success-overlay';
-  el.innerHTML = `
-    <div class="success-box">
-      <div class="success-check" style="color:var(--success); line-height:1;"><svg class="icon icon-xl" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></div>
-      <div class="success-title">¡Pedido creado!</div>
-      <div class="success-id">${pedido.id_pedido}</div>
-      <div class="success-meta">
-        Total: <strong>${formatCurrency(pedido.total_pagar)}</strong>
-        · Abonado: <strong style="color:var(--success-text)">${formatCurrency(pedido.total_abonado)}</strong>
-        · Saldo: <strong style="color:${pedido.saldo_pendiente > 0 ? 'var(--danger-text)' : 'var(--success-text)'}">${formatCurrency(pedido.saldo_pendiente)}</strong>
-      </div>
-      <p style="font-size:0.8rem; color:var(--text-tertiary); margin-top:12px;">Enviando a imprimir...</p>
-    </div>
-  `;
-  document.body.appendChild(el);
-  el.addEventListener('click', () => el.remove());
-  setTimeout(() => el.remove(), 4000);
-}
+
 
 // Cleanup function (called on route change)
 export function cleanupPedidos() {

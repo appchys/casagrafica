@@ -11,4 +11,6 @@ El subtítulo no es necesario, se quita.
 
 Evita usar abrir la URL del localhost en el navegador para ver la pantalla, no es necesario.
 
-No depliegues en hosting sin mi confirmación.
+No depliegues en hosting sin mi confirmación. Las reglas de firebase si puedes desplegar
+
+Siempre háblame en español.
