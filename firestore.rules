@@ -184,6 +184,40 @@ service cloud.firestore {
              ));
     }
 
+    function isValidSesionCaja(data) {
+      return data.keys().hasAll(['fecha_apertura', 'usuario_apertura', 'monto_apertura', 'estado']) &&
+             data.keys().hasOnly([
+               'fecha_apertura', 'usuario_apertura', 'monto_apertura', 'estado',
+               'fecha_cierre', 'usuario_cierre',
+               'monto_cierre_efectivo_estimado', 'monto_cierre_efectivo_real',
+               'monto_cierre_transferencia_estimado', 'monto_cierre_tarjeta_estimado',
+               'diferencia_efectivo', 'observaciones'
+             ]) &&
+             data.fecha_apertura is timestamp &&
+             data.monto_apertura is number &&
+             data.monto_apertura >= 0 &&
+             data.estado in ['abierta', 'cerrada'] &&
+             data.usuario_apertura.keys().hasAll(['uid', 'nombre', 'email']) &&
+             data.usuario_apertura.keys().hasOnly(['uid', 'nombre', 'email']) &&
+             isValidString(data.usuario_apertura.uid, 128) &&
+             isValidString(data.usuario_apertura.nombre, 128) &&
+             isValidString(data.usuario_apertura.email, 128) &&
+             (!('fecha_cierre' in data) || data.fecha_cierre is timestamp) &&
+             (!('monto_cierre_efectivo_estimado' in data) || data.monto_cierre_efectivo_estimado is number) &&
+             (!('monto_cierre_efectivo_real' in data) || data.monto_cierre_efectivo_real is number) &&
+             (!('monto_cierre_transferencia_estimado' in data) || data.monto_cierre_transferencia_estimado is number) &&
+             (!('monto_cierre_tarjeta_estimado' in data) || data.monto_cierre_tarjeta_estimado is number) &&
+             (!('diferencia_efectivo' in data) || data.diferencia_efectivo is number) &&
+             (!('observaciones' in data) || isValidString(data.observaciones, 2000)) &&
+             (!('usuario_cierre' in data) || data.usuario_cierre == null || (
+               data.usuario_cierre.keys().hasAll(['uid', 'nombre', 'email']) &&
+               data.usuario_cierre.keys().hasOnly(['uid', 'nombre', 'email']) &&
+               isValidString(data.usuario_cierre.uid, 128) &&
+               isValidString(data.usuario_cierre.nombre, 128) &&
+               isValidString(data.usuario_cierre.email, 128)
+             ));
+    }
+
     // ===============================================================
     // Collection Rules
     // ===============================================================
@@ -220,7 +254,7 @@ service cloud.firestore {
         isAdmin() || hasPermission('editar_pedidos') || hasPermission('gestionar_taller')
       );
 
-      allow delete: if isAdmin();
+      allow delete: if isAdmin() || (hasPermission('crear_pedidos') && hasPermission('editar_pedidos'));
     }
 
     // Colección de clientes
@@ -268,6 +302,18 @@ service cloud.firestore {
         isAdmin() || hasPermission('gestionar_caja')
       );
       allow update: if isAuthenticated() && isValidEgreso(request.resource.data) && (
+        isAdmin() || hasPermission('gestionar_caja')
+      );
+      allow delete: if isAdmin();
+    }
+
+    // Colección de sesiones de caja
+    match /sesiones_caja/{sesionId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidSesionCaja(request.resource.data) && (
+        isAdmin() || hasPermission('gestionar_caja')
+      );
+      allow update: if isAuthenticated() && isValidSesionCaja(request.resource.data) && (
         isAdmin() || hasPermission('gestionar_caja')
       );
       allow delete: if isAdmin();

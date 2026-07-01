@@ -337,7 +337,7 @@ a { color: var(--accent); text-decoration:none; }
   border-radius: var(--radius-sm);
   color: var(--text-primary);
   font-family: var(--font-sans);
-  font-size: 0.9rem;
+  font-size: 16px; /* Evita zoom automático al enfocar en iOS */
   line-height: 1.4;
   transition: all var(--t-fast);
   outline: none;
@@ -366,7 +366,7 @@ a { color: var(--accent); text-decoration:none; }
 
 .form-mono {
   font-family: var(--font-mono);
-  font-size: 0.95rem;
+  font-size: 16px; /* Evita zoom automático al enfocar en iOS */
   font-weight: 600;
 }
 
@@ -977,7 +977,7 @@ a { color: var(--accent); text-decoration:none; }
   border-radius: var(--radius-sm);
   color: var(--text-primary);
   font-family: var(--font-sans);
-  font-size: 0.875rem;
+  font-size: 16px; /* Evita zoom automático al enfocar en iOS */
   outline: none;
   transition: all var(--t-fast);
 }
@@ -2004,6 +2004,22 @@ a { color: var(--accent); text-decoration:none; }
   font-weight: 700;
 }
 
+.caja-status-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: #757575;
+  margin-left: 8px;
+  flex-shrink: 0;
+  transition: background-color var(--t-fast), box-shadow var(--t-fast);
+}
+
+.caja-status-dot.open {
+  background-color: var(--success);
+  box-shadow: 0 0 8px var(--success);
+}
+
 .drawer-nav-item svg {
   width: 20px;
   height: 20px;
@@ -2155,10 +2171,12 @@ a { color: var(--accent); text-decoration:none; }
     width: 300px;
     max-width: 85vw;
     height: 100vh;
+    height: 100dvh;
     transform: translateX(-100%);
     box-shadow: none;
     transition: transform var(--t-normal) cubic-bezier(0.4, 0, 0.2, 1), box-shadow var(--t-normal) ease;
     z-index: 300;
+    padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
   }
   
   .mobile-menu-drawer.open {
@@ -2168,6 +2186,27 @@ a { color: var(--accent); text-decoration:none; }
 
   .menu-close {
     display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    color: var(--nav-text-muted);
+    cursor: pointer;
+    width: 36px;
+    height: 36px;
+    border-radius: var(--radius-sm);
+    transition: all var(--t-fast);
+  }
+
+  .menu-close:hover,
+  .menu-close:active {
+    background: var(--nav-item-hover);
+    color: var(--nav-text);
+  }
+
+  .menu-close svg {
+    width: 20px;
+    height: 20px;
   }
 
   /* Sin margen para el contenido en móvil */

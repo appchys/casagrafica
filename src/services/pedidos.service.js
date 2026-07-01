@@ -17,7 +17,7 @@ const COLECCION = 'pedidos';
 /**
  * Create a new order with products and optional first payment inside a transaction to ensure unique sequential IDs
  */
-export async function crearPedido({ cliente, productos, primerAbono, notas, usuario }) {
+export async function crearPedido({ cliente, productos, primerAbono, abonosIniciales, notas, usuario }) {
   const normalizedPhone = normalizarTelefono(cliente.telefono);
 
   // Save/Update client to get their Firestore docId
@@ -39,7 +39,23 @@ export async function crearPedido({ cliente, productos, primerAbono, notas, usua
 
   // Build abonos array
   const abonos = [];
-  if (primerAbono && Number(primerAbono.monto) > 0) {
+  if (Array.isArray(abonosIniciales) && abonosIniciales.length > 0) {
+    abonosIniciales.forEach((ab) => {
+      if (Number(ab.monto) > 0) {
+        abonos.push({
+          id_abono: generateAbonoId(),
+          fecha_pago: Timestamp.now(),
+          monto: Number(ab.monto),
+          metodo_pago: ab.metodo_pago || 'Efectivo',
+          usuario: usuario ? {
+            uid: usuario.uid || '',
+            nombre: usuario.nombre || '',
+            email: usuario.email || ''
+          } : null
+        });
+      }
+    });
+  } else if (primerAbono && Number(primerAbono.monto) > 0) {
     abonos.push({
       id_abono: generateAbonoId(),
       fecha_pago: Timestamp.now(),
@@ -332,9 +348,9 @@ export async function obtenerTiposProducto() {
  * Update an existing order: replaces productos, notes, and recalculates totals.
  * Preserves id_pedido, cliente, existing abonos, and fecha_creacion.
  */
-export async function actualizarPedido(docId, { productos, notas }) {
+export async function actualizarPedido(docId, { productos, notas, abonos, usuario }) {
   const productosProcessed = productos.map((p) => ({
-    id_producto: generateProductId(),
+    id_producto: p.id_producto || generateProductId(),
     producto_tipo: p.producto_tipo.trim(),
     detalle_personalizado: p.detalle_personalizado.trim(),
     cantidad: Number(p.cantidad) || 1,
@@ -347,12 +363,43 @@ export async function actualizarPedido(docId, { productos, notas }) {
   if (!snap.exists()) throw new Error('Pedido no encontrado');
 
   const existing = snap.data();
-  const abonos = existing.abonos || [];
-  const { total_pagar, total_abonado, saldo_pendiente, estado_pago } = recalcularOrden(productosProcessed, abonos);
+
+  // Procesar abonos manteniendo los existentes y generando datos completos para los nuevos
+  let abonosFinales = [];
+  if (abonos !== undefined) {
+    if (Array.isArray(abonos)) {
+      abonos.forEach((ab) => {
+        if (Number(ab.monto) > 0) {
+          if (ab.id_abono) {
+            abonosFinales.push({
+              id_abono: ab.id_abono,
+              fecha_pago: ab.fecha_pago,
+              monto: Number(ab.monto),
+              metodo_pago: ab.metodo_pago || 'Efectivo',
+              usuario: ab.usuario || null,
+            });
+          } else {
+            abonosFinales.push({
+              id_abono: generateAbonoId(),
+              fecha_pago: Timestamp.now(),
+              monto: Number(ab.monto),
+              metodo_pago: ab.metodo_pago || 'Efectivo',
+              usuario: usuario || null,
+            });
+          }
+        }
+      });
+    }
+  } else {
+    abonosFinales = existing.abonos || [];
+  }
+
+  const { total_pagar, total_abonado, saldo_pendiente, estado_pago } = recalcularOrden(productosProcessed, abonosFinales);
 
   await updateDoc(docRef, {
     productos: productosProcessed,
     notas: (notas || '').trim(),
+    abonos: abonosFinales,
     total_pagar,
     total_abonado,
     saldo_pendiente,

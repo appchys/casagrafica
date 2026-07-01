@@ -21,9 +21,7 @@ let tempProduct = null;
 
 let existingTipos = [];
 let savedProducts = [];
-let pagoTipo = 'ninguno'; // 'ninguno', 'completo_efectivo', 'completo_transferencia', 'parcial'
-let pagoParcialMonto = '';
-let pagoParcialMetodo = 'Efectivo';
+let nuevoPedidoAbonos = [];
 let isAbonoModalOpen = false;
 let isNewClientModalOpen = false;
 let tempNewClientName = '';
@@ -78,9 +76,7 @@ export function renderPedidos() {
   isFormOpen = false;
   currentProductIndex = null;
   tempProduct = null;
-  pagoTipo = 'ninguno';
-  pagoParcialMonto = '';
-  pagoParcialMetodo = 'Efectivo';
+  nuevoPedidoAbonos = [];
   isAbonoModalOpen = false;
   isNewClientModalOpen = false;
   tempNewClientName = '';
@@ -133,15 +129,10 @@ export function renderPedidos() {
 
         <div style="height: 1px; background: var(--border); margin: 20px 0 16px;"></div>
 
-        <!-- Primer Abono -->
+        <!-- Sección de Pago Reestructurada y Simplificada -->
         <div style="margin-bottom: 20px;">
           <div style="font-size: 0.75rem; font-weight: 700; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">
             Método de Pago
-          </div>
-          <div class="payment-options" id="payment-options-group">
-            <button type="button" class="pay-option-btn" data-pago-tipo="completo_efectivo"><span class="pay-option-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg></span> Efectivo</button>
-            <button type="button" class="pay-option-btn" data-pago-tipo="completo_transferencia"><span class="pay-option-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="2 10 12 2 22 10"></polygon><rect x="4" y="10" width="16" height="11"></rect><line x1="9" y1="15" x2="9" y2="18"></line><line x1="12" y1="15" x2="12" y2="18"></line><line x1="15" y1="15" x2="15" y2="18"></line></svg></span> Transferencia</button>
-            <button type="button" class="pay-option-btn" data-pago-tipo="parcial"><span class="pay-option-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6.5" cy="15" r="5.5"></circle><rect x="12" y="10" width="9.5" height="7" rx="1.5"></rect><line x1="14.5" y1="12.5" x2="19" y2="12.5"></line><line x1="14.5" y1="15" x2="17" y2="15"></line></svg></span> Abono</button>
           </div>
           <div id="abono-summary-container"></div>
         </div>
@@ -484,20 +475,7 @@ async function openSidebarForEdit(pedidoDocId) {
 
     // Load payment
     const abonos = pedido.abonos || [];
-    const primerAbono = abonos.length > 0 ? abonos[abonos.length - 1] : null;
-    if (pedido.saldo_pendiente <= 0 && abonos.length > 0) {
-      pagoTipo = primerAbono.metodo_pago === 'Transferencia' ? 'completo_transferencia' : 'completo_efectivo';
-      pagoParcialMonto = '';
-      pagoParcialMetodo = 'Efectivo';
-    } else if (primerAbono && pedido.total_abonado > 0) {
-      pagoTipo = 'parcial';
-      pagoParcialMonto = pedido.total_abonado;
-      pagoParcialMetodo = primerAbono.metodo_pago || 'Efectivo';
-    } else {
-      pagoTipo = 'ninguno';
-      pagoParcialMonto = '';
-      pagoParcialMetodo = 'Efectivo';
-    }
+    nuevoPedidoAbonos = abonos.map(ab => ({ ...ab }));
 
     isFormOpen = false;
     isAbonoModalOpen = false;
@@ -612,9 +590,7 @@ function resetSidebar() {
   isFormOpen = false;
   currentProductIndex = null;
   tempProduct = null;
-  pagoTipo = 'ninguno';
-  pagoParcialMonto = '';
-  pagoParcialMetodo = 'Efectivo';
+  nuevoPedidoAbonos = [];
   isAbonoModalOpen = false;
   isNewClientModalOpen = false;
   tempNewClientName = '';
@@ -655,107 +631,96 @@ function closeAllDropdowns() {
   document.querySelectorAll('.product-dropdown-menu.open').forEach(m => m.classList.remove('open'));
 }
 
-function updatePaymentUI() {
-  document.querySelectorAll('.pay-option-btn').forEach(btn => {
-    btn.classList.toggle('active', btn.dataset.pagoTipo === pagoTipo);
-  });
-  const abonoSummaryContainer = document.getElementById('abono-summary-container');
-  const total = calcularTotalPagar(productos);
-  if (abonoSummaryContainer) {
-    if (pagoTipo === 'completo_efectivo') {
-      abonoSummaryContainer.innerHTML = `
-        <div class="abono-summary-box">
-          <div class="abono-summary-info">
-            <span>Pago total registrado</span>
-            <span class="abono-summary-monto">${formatCurrency(total)} (Efectivo)</span>
-          </div>
-          <button type="button" class="abono-clear-btn" id="btn-clear-payment" title="Eliminar pago">✕</button>
-        </div>
-      `;
-    } else if (pagoTipo === 'completo_transferencia') {
-      abonoSummaryContainer.innerHTML = `
-        <div class="abono-summary-box">
-          <div class="abono-summary-info">
-            <span>Pago total registrado</span>
-            <span class="abono-summary-monto">${formatCurrency(total)} (Transferencia)</span>
-          </div>
-          <button type="button" class="abono-clear-btn" id="btn-clear-payment" title="Eliminar pago">✕</button>
-        </div>
-      `;
-    } else if (pagoTipo === 'parcial' && Number(pagoParcialMonto) > 0) {
-      abonoSummaryContainer.innerHTML = `
-        <div class="abono-summary-box">
-          <div class="abono-summary-info">
-            <span>Abono registrado</span>
-            <span class="abono-summary-monto">${formatCurrency(pagoParcialMonto)} (${pagoParcialMetodo})</span>
-          </div>
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <button type="button" class="abono-summary-change-btn" id="btn-change-abono">Cambiar</button>
-            <button type="button" class="abono-clear-btn" id="btn-clear-payment" title="Eliminar abono">✕</button>
-          </div>
-        </div>
-      `;
-    } else {
-      abonoSummaryContainer.innerHTML = '';
-    }
+function obtenerIconoMetodoPago(metodo) {
+  if (metodo === 'Transferencia') {
+    return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 16px; height: 16px; color: var(--text-primary);"><polygon points="2 10 12 2 22 10"></polygon><rect x="4" y="10" width="16" height="11"></rect><line x1="9" y1="15" x2="9" y2="18"></line><line x1="12" y1="15" x2="12" y2="18"></line><line x1="15" y1="15" x2="15" y2="18"></line></svg>`;
   }
+  if (metodo === 'Tarjeta') {
+    return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 16px; height: 16px; color: var(--text-primary);"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect><line x1="1" y1="10" x2="23" y2="10"></line></svg>`;
+  }
+  // Por defecto Efectivo
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 16px; height: 16px; color: var(--text-primary);"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>`;
+}
+
+function updatePaymentUI() {
+  updateSidebarUI();
 }
 
 function updateSidebarUI() {
   const modalContainer = document.getElementById('app-modal-container');
   const listContainer = document.getElementById('products-list-container');
   const saveBtn = document.getElementById('btn-save-print');
-  const abonoSummaryContainer = document.getElementById('abono-summary-container');
   const total = calcularTotalPagar(productos);
+  const abonoSummaryContainer = document.getElementById('abono-summary-container');
 
-  // 1. Activar botón de método de pago seleccionado
-  const payButtons = document.querySelectorAll('.pay-option-btn');
-  payButtons.forEach(btn => {
-    if (btn.dataset.pagoTipo === pagoTipo) {
-      btn.classList.add('active');
-    } else {
-      btn.classList.remove('active');
-    }
-  });
-
-  // 2. Renderizar resumen del abono
   if (abonoSummaryContainer) {
-    if (pagoTipo === 'completo_efectivo') {
-      abonoSummaryContainer.innerHTML = `
-        <div class="abono-summary-box">
-          <div class="abono-summary-info">
-            <span>Pago total registrado</span>
-            <span class="abono-summary-monto">${formatCurrency(total)} (Efectivo)</span>
+    const totalAbonadoAct = nuevoPedidoAbonos.reduce((sum, ab) => sum + Number(ab.monto), 0);
+    const saldoRestante = Math.max(0, total - totalAbonadoAct);
+
+    let itemsHtml = '';
+    if (nuevoPedidoAbonos.length > 0) {
+      itemsHtml = nuevoPedidoAbonos.map((ab, idx) => {
+        const animationStyle = ab.esNuevo ? 'animation: slideDown 0.15s ease-out;' : '';
+        if (ab.esNuevo) {
+          ab.esNuevo = false;
+        }
+        return `
+          <div class="cs-selected-client-row" style="margin-bottom: 8px; ${animationStyle}">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <div style="display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; flex-shrink: 0;">
+                ${obtenerIconoMetodoPago(ab.metodo_pago)}
+              </div>
+              <div>
+                <div class="cs-client-name" style="font-family: var(--font-mono);">${formatCurrency(ab.monto)}</div>
+                <div class="cs-client-phone">${ab.metodo_pago}</div>
+              </div>
+            </div>
+            <div style="display: flex; align-items: center;">
+              <button type="button" class="cs-icon-btn cs-icon-btn-remove btn-remove-abono-item" data-index="${idx}" title="Eliminar abono">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 15px; height: 15px;"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+              </button>
+            </div>
           </div>
-          <button type="button" class="abono-clear-btn" id="btn-clear-payment" title="Eliminar pago">✕</button>
-        </div>
-      `;
-    } else if (pagoTipo === 'completo_transferencia') {
-      abonoSummaryContainer.innerHTML = `
-        <div class="abono-summary-box">
-          <div class="abono-summary-info">
-            <span>Pago total registrado</span>
-            <span class="abono-summary-monto">${formatCurrency(total)} (Transferencia)</span>
-          </div>
-          <button type="button" class="abono-clear-btn" id="btn-clear-payment" title="Eliminar pago">✕</button>
-        </div>
-      `;
-    } else if (pagoTipo === 'parcial' && Number(pagoParcialMonto) > 0) {
-      abonoSummaryContainer.innerHTML = `
-        <div class="abono-summary-box">
-          <div class="abono-summary-info">
-            <span>Abono registrado</span>
-            <span class="abono-summary-monto">${formatCurrency(pagoParcialMonto)} (${pagoParcialMetodo})</span>
-          </div>
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <button type="button" class="abono-summary-change-btn" id="btn-change-abono">Cambiar</button>
-            <button type="button" class="abono-clear-btn" id="btn-clear-payment" title="Eliminar abono">✕</button>
-          </div>
+        `;
+      }).join('');
+    }
+
+    let actionsHtml = '';
+    if (saldoRestante > 0.001) {
+      actionsHtml = `
+        <div style="display: flex; gap: 6px; margin-top: 12px;">
+          <button type="button" class="btn btn-sm btn-outline btn-pagar-rapido" data-metodo="Efectivo" style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 8px 4px; font-size: 0.72rem; border-color: var(--border-strong);">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 16px; height: 16px;"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+            <span>Efectivo</span>
+          </button>
+          <button type="button" class="btn btn-sm btn-outline btn-pagar-rapido" data-metodo="Transferencia" style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 8px 4px; font-size: 0.72rem; border-color: var(--border-strong);">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 16px; height: 16px;"><polygon points="2 10 12 2 22 10"></polygon><rect x="4" y="10" width="16" height="11"></rect><line x1="9" y1="15" x2="9" y2="18"></line><line x1="12" y1="15" x2="12" y2="18"></line><line x1="15" y1="15" x2="15" y2="18"></line></svg>
+            <span>Transf.</span>
+          </button>
+          <button type="button" class="btn btn-sm btn-outline btn-pagar-rapido" data-metodo="Tarjeta" style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 8px 4px; font-size: 0.72rem; border-color: var(--border-strong);">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 16px; height: 16px;"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect><line x1="1" y1="10" x2="23" y2="10"></line></svg>
+            <span>Tarjeta</span>
+          </button>
+          <button type="button" class="btn btn-sm btn-outline" id="btn-registrar-pago" style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 8px 4px; font-size: 0.72rem; border-color: var(--border-strong);">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 16px; height: 16px;"><circle cx="6.5" cy="15" r="5.5"></circle><rect x="12" y="10" width="9.5" height="7" rx="1.5"></rect><line x1="14.5" y1="12.5" x2="19" y2="12.5"></line><line x1="14.5" y1="15" x2="17" y2="15"></line></svg>
+            <span>Abono</span>
+          </button>
         </div>
       `;
     } else {
-      abonoSummaryContainer.innerHTML = '';
+      actionsHtml = '';
     }
+
+    abonoSummaryContainer.innerHTML = `
+      <div>
+        ${itemsHtml}
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 8px; padding: 4px 0; font-size: 0.8rem; color: var(--text-secondary);">
+          <span>Saldo pendiente:</span>
+          <strong style="color: ${saldoRestante > 0.001 ? 'var(--danger-text)' : 'var(--success-text)'}; font-family: var(--font-mono); font-size: 0.85rem;">${formatCurrency(saldoRestante)}</strong>
+        </div>
+        ${actionsHtml}
+      </div>
+    `;
   }
 
   // 3. Renderizar modales (producto o abono)
@@ -796,7 +761,9 @@ function updateSidebarUI() {
     }
   } else if (isAbonoModalOpen) {
     if (modalContainer) {
-      modalContainer.innerHTML = renderAbonoFormModal(total, pagoParcialMonto, pagoParcialMetodo);
+      const totalAbonadoAct = nuevoPedidoAbonos.reduce((sum, ab) => sum + Number(ab.monto), 0);
+      const saldoRestante = total - totalAbonadoAct;
+      modalContainer.innerHTML = renderAbonoFormModal(saldoRestante, saldoRestante, 'Efectivo');
       setTimeout(() => {
         const input = document.getElementById('abono-modal-monto');
         if (input) {
@@ -1149,20 +1116,21 @@ export function bindPedidosEvents() {
         const montoVal = Number(document.getElementById('abono-modal-monto')?.value) || 0;
         const metodoVal = document.getElementById('abono-modal-metodo')?.value || 'Efectivo';
 
+        const totalAbonadoAct = nuevoPedidoAbonos.reduce((sum, ab) => sum + Number(ab.monto), 0);
+        const saldoRestante = total - totalAbonadoAct;
+
         if (montoVal <= 0) {
           showToast('El monto del abono debe ser mayor a 0', 'error');
           document.getElementById('abono-modal-monto')?.focus();
           return;
         }
-        if (montoVal > total) {
-          showToast('El abono no puede exceder el total del pedido', 'error');
+        if (montoVal > saldoRestante + 0.001) {
+          showToast('El abono no puede exceder el saldo pendiente del pedido', 'error');
           document.getElementById('abono-modal-monto')?.focus();
           return;
         }
 
-        pagoParcialMonto = montoVal;
-        pagoParcialMetodo = metodoVal;
-        pagoTipo = 'parcial';
+        nuevoPedidoAbonos.push({ monto: montoVal, metodo_pago: metodoVal, esNuevo: true });
         isAbonoModalOpen = false;
         updateSidebarUI();
         showToast('Abono registrado', 'success');
@@ -1170,18 +1138,12 @@ export function bindPedidosEvents() {
 
       // Cancel Abono
       if (e.target.closest('#btn-cancel-abono-modal')) {
-        if (Number(pagoParcialMonto) <= 0) {
-          pagoTipo = 'ninguno';
-        }
         isAbonoModalOpen = false;
         updateSidebarUI();
       }
 
       // Close Abono modal on overlay click
       if (e.target.id === 'abono-form-modal') {
-        if (Number(pagoParcialMonto) <= 0) {
-          pagoTipo = 'ninguno';
-        }
         isAbonoModalOpen = false;
         updateSidebarUI();
       }
@@ -1415,53 +1377,78 @@ export function bindPedidosEvents() {
         const index = parseInt(removeBtn.dataset.removeIndex);
         productos.splice(index, 1);
         const newTotal = calcularTotalPagar(productos);
-        if (pagoTipo === 'parcial' && Number(pagoParcialMonto) > newTotal) {
-          pagoParcialMonto = newTotal;
-          if (pagoParcialMonto <= 0) {
-            pagoTipo = 'ninguno';
-            pagoParcialMonto = '';
+        
+        let totalAbonadoAct = nuevoPedidoAbonos.reduce((sum, ab) => sum + Number(ab.monto), 0);
+        if (totalAbonadoAct > newTotal) {
+          let acumulado = 0;
+          const abonosAjustados = [];
+          for (const ab of nuevoPedidoAbonos) {
+            if (acumulado + ab.monto <= newTotal) {
+              abonosAjustados.push(ab);
+              acumulado += ab.monto;
+            } else {
+              const restante = newTotal - acumulado;
+              if (restante > 0) {
+                abonosAjustados.push({ monto: restante, metodo_pago: ab.metodo_pago });
+                acumulado += restante;
+              }
+              break;
+            }
           }
+          nuevoPedidoAbonos = abonosAjustados;
         }
         updateSidebarUI();
         updateTotals();
         showToast('Producto eliminado', 'info');
       }
 
-      // Selector de opción de pago
-        const payOptBtn = e.target.closest('.pay-option-btn');
-      if (payOptBtn) {
-        const type = payOptBtn.dataset.pagoTipo;
-        if (type === 'parcial') {
-          const total = calcularTotalPagar(productos);
-          if (total <= 0) {
-            showToast('Agrega productos al pedido antes de registrar un abono', 'error');
-            return;
-          }
-          pagoTipo = 'parcial';
-          isAbonoModalOpen = true;
-          updateSidebarUI();
-        } else {
-          pagoTipo = type;
-          isAbonoModalOpen = false;
-          updatePaymentUI();
-        }
+      // Eliminar abono individual
+      const removeAbonoBtn = e.target.closest('.btn-remove-abono-item');
+      if (removeAbonoBtn) {
+        const index = parseInt(removeAbonoBtn.dataset.index);
+        nuevoPedidoAbonos.splice(index, 1);
+        updateSidebarUI();
+        showToast('Abono eliminado', 'info');
+        return;
       }
 
-      // Botón Cambiar abono registrado
-      if (e.target.closest('#btn-change-abono')) {
+      // Registrar pago (abre modal de abono parcial)
+      if (e.target.closest('#btn-registrar-pago')) {
         const total = calcularTotalPagar(productos);
-        if (total <= 0) return;
+        if (total <= 0) {
+          showToast('Agrega productos al pedido antes de registrar un abono', 'error');
+          return;
+        }
+        const totalAbonadoAct = nuevoPedidoAbonos.reduce((sum, ab) => sum + Number(ab.monto), 0);
+        const saldoRestante = total - totalAbonadoAct;
+        if (saldoRestante <= 0.001) {
+          showToast('El pedido ya está cubierto por completo', 'info');
+          return;
+        }
         isAbonoModalOpen = true;
         updateSidebarUI();
+        return;
       }
 
-      // Botón Eliminar pago / abono
-      if (e.target.closest('#btn-clear-payment')) {
-        pagoTipo = 'ninguno';
-        pagoParcialMonto = '';
-        pagoParcialMetodo = 'Efectivo';
-        updatePaymentUI();
-        showToast('Pago eliminado', 'info');
+      // Pagar todo con método rápido (Efectivo, Transferencia, Tarjeta)
+      const pagarRapidoBtn = e.target.closest('.btn-pagar-rapido');
+      if (pagarRapidoBtn) {
+        const metodo = pagarRapidoBtn.dataset.metodo;
+        const total = calcularTotalPagar(productos);
+        if (total <= 0) {
+          showToast('Agrega productos al pedido antes de realizar el pago', 'error');
+          return;
+        }
+        const totalAbonadoAct = nuevoPedidoAbonos.reduce((sum, ab) => sum + Number(ab.monto), 0);
+        const saldoRestante = Math.max(0, total - totalAbonadoAct);
+        if (saldoRestante <= 0.001) {
+          showToast('El pedido ya está cubierto por completo', 'info');
+          return;
+        }
+        nuevoPedidoAbonos.push({ monto: Number(saldoRestante.toFixed(2)), metodo_pago: metodo, esNuevo: true });
+        updateSidebarUI();
+        showToast(`Pedido saldado con ${metodo}`, 'success');
+        return;
       }
     });
   }
@@ -1518,9 +1505,6 @@ function handleEsc(e) {
       e.stopPropagation();
       e.preventDefault();
     } else if (isAbonoModalOpen) {
-      if (Number(pagoParcialMonto) <= 0) {
-        pagoTipo = 'ninguno';
-      }
       isAbonoModalOpen = false;
       updateSidebarUI();
       e.stopPropagation();
@@ -1542,21 +1526,7 @@ function handleEsc(e) {
 function updateTotals() {
   const box = document.getElementById('totals-box');
   if (box) box.innerHTML = renderTotalsHTML();
-  
-  // Actualizar resumen del abono si el total cambió (pago completo)
-  const abonoSummaryContainer = document.getElementById('abono-summary-container');
-  if (abonoSummaryContainer && (pagoTipo === 'completo_efectivo' || pagoTipo === 'completo_transferencia')) {
-    const total = calcularTotalPagar(productos);
-    const method = pagoTipo === 'completo_efectivo' ? 'Efectivo' : 'Transferencia';
-    abonoSummaryContainer.innerHTML = `
-      <div class="abono-summary-box">
-        <div class="abono-summary-info">
-          <span>Pago total registrado</span>
-          <span class="abono-summary-monto">${formatCurrency(total)} (${method})</span>
-        </div>
-      </div>
-    `;
-  }
+  updateSidebarUI();
 }
 
 async function handleSave() {
@@ -1578,20 +1548,7 @@ async function handleSave() {
     return;
   }
 
-  const total = calcularTotalPagar(productos);
-  let abonoMonto = 0;
-  let abonoMetodo = 'Efectivo';
-
-  if (pagoTipo === 'completo_efectivo') {
-    abonoMonto = total;
-    abonoMetodo = 'Efectivo';
-  } else if (pagoTipo === 'completo_transferencia') {
-    abonoMonto = total;
-    abonoMetodo = 'Transferencia';
-  } else if (pagoTipo === 'parcial') {
-    abonoMonto = Number(pagoParcialMonto) || 0;
-    abonoMetodo = pagoParcialMetodo;
-  }
+  const abonosFinales = nuevoPedidoAbonos.map(ab => ({ ...ab, monto: Number(ab.monto) }));
 
   saving = true;
   const btn = document.getElementById('btn-save-print');
@@ -1602,7 +1559,7 @@ async function handleSave() {
 
     let savedPedido = null;
     if (editingPedidoId) {
-      await actualizarPedido(editingPedidoId, { productos, notas });
+      await actualizarPedido(editingPedidoId, { productos, notas, abonos: abonosFinales, usuario: getCurrentUserProfile() });
       closeSidebar();
       showToast('Pedido actualizado', 'success');
     } else {
@@ -1614,7 +1571,7 @@ async function handleSave() {
           isNew: clienteState.isNew
         },
         productos,
-        primerAbono: abonoMonto > 0 ? { monto: abonoMonto, metodo_pago: abonoMetodo } : null,
+        abonosIniciales: abonosFinales,
         notas,
         usuario: getCurrentUserProfile(),
       });

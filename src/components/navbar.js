@@ -1,7 +1,7 @@
 /**
  * Renders the top navigation bar (dark theme)
  */
-export function renderNavbar(currentPage, userEmail, permissions = [], userName = '') {
+export function renderNavbar(currentPage, userEmail, permissions = [], userName = '', cajaAbierta = false) {
   const displayName = userName || (userEmail ? userEmail.split('@')[0] : 'Usuario');
   const initials = displayName.slice(0, 2).toUpperCase();
   
@@ -82,7 +82,10 @@ export function renderNavbar(currentPage, userEmail, permissions = [], userName 
                 <path d="M6 12h.01M18 12h.01"></path>
               </svg>
             </span>
-            <span class="nav-label">Caja</span>
+            <span class="nav-label" style="display:inline-flex; align-items:center; width:100%; justify-content:space-between;">
+              Caja
+              <span id="caja-status-dot" class="caja-status-dot ${cajaAbierta ? 'open' : ''}" title="${cajaAbierta ? 'Caja abierta' : 'Caja cerrada'}"></span>
+            </span>
           </a>
         </li>
         ` : ''}

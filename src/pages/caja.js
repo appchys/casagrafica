@@ -2,12 +2,25 @@ import { escucharPedidosRecientes } from '../services/pedidos.service.js';
 import { escucharEgresos, registrarEgreso } from '../services/egresos.service.js';
 import { formatCurrency } from '../utils/formatters.js';
 import { showToast, getCurrentUserProfile } from '../main.js';
+import {
+  escucharSesionActiva,
+  escucharHistorialSesiones,
+  abrirSesionCaja,
+  cerrarSesionCaja
+} from '../services/caja.service.js';
 
 let unsubscribePedidos = null;
 let unsubscribeEgresos = null;
+let unsubscribeSesionActiva = null;
+let unsubscribeHistorialSesiones = null;
+
 let allPedidos = [];
 let allEgresos = [];
-let activeTab = 'hoy'; // 'hoy' o 'rango'
+let sesionActiva = null;
+let historialSesiones = [];
+
+let activeTab = 'hoy'; // 'hoy' o 'rango' (Filtro de movimientos)
+let activePageTab = 'apertura_cierre'; // 'apertura_cierre' o 'historial' (Pestañas principales)
 
 export function renderCaja() {
   const hoyStr = new Date().toISOString().split('T')[0];
@@ -19,6 +32,49 @@ export function renderCaja() {
         flex-direction: column;
         gap: 24px;
         height: 100%;
+      }
+      
+      .caja-tab-container-hidden {
+        display: none !important;
+      }
+      
+      .caja-page-tabs {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 20px;
+        border-bottom: 1px solid var(--border);
+        padding-bottom: 0;
+      }
+      
+      .page-tab-btn {
+        background: transparent;
+        border: none;
+        color: var(--text-secondary);
+        padding: 10px 20px;
+        font-size: 0.95rem;
+        font-weight: 700;
+        cursor: pointer;
+        position: relative;
+        transition: all var(--t-fast);
+      }
+      
+      .page-tab-btn:hover {
+        color: var(--text-primary);
+      }
+      
+      .page-tab-btn.active {
+        color: var(--text-primary);
+      }
+      
+      .page-tab-btn.active::after {
+        content: '';
+        position: absolute;
+        bottom: -1px;
+        left: 0;
+        right: 0;
+        height: 3px;
+        background: var(--accent);
+        border-radius: var(--radius-full) var(--radius-full) 0 0;
       }
       
       .caja-filters-card {
@@ -79,7 +135,7 @@ export function renderCaja() {
         padding: 8px 12px;
         border-radius: var(--radius-xs);
         font-family: var(--font-sans);
-        font-size: 0.88rem;
+        font-size: 16px; /* Evita zoom automático al enfocar en iOS */
         outline: none;
       }
       
@@ -241,98 +297,120 @@ export function renderCaja() {
     </style>
     
     <main class="page-container">
-      <header class="page-header" style="margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+      <header class="page-header" style="margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
         <div>
           <h1 class="page-title">Flujo de Caja</h1>
-          <p class="page-subtitle">Monitoreo de ingresos y pagos registrados en el sistema</p>
         </div>
         <button class="btn btn-primary" id="btn-nuevo-egreso" type="button">
           Registrar Egreso
         </button>
       </header>
       
-      <div class="caja-layout">
-        <!-- Filtros -->
-        <div class="caja-filters-card">
-          <div class="filter-tabs">
-            <button class="filter-tab-btn active" id="tab-hoy" type="button">Hoy</button>
-            <button class="filter-tab-btn" id="tab-rango" type="button">Rango de fechas</button>
-          </div>
-          
-          <div class="date-inputs-container hidden" id="date-inputs">
-            <div style="display:flex; align-items:center; gap:8px;">
-              <span style="font-size:0.85rem; color:var(--text-secondary); font-weight:600;">Desde:</span>
-              <input type="date" class="caja-date-input" id="caja-date-start" value="${hoyStr}">
-              <span style="font-size:0.85rem; color:var(--text-secondary); font-weight:600;">Hasta:</span>
-              <input type="date" class="caja-date-input" id="caja-date-end" value="${hoyStr}">
+      <!-- Pestañas Principales de la Página -->
+      <div class="caja-page-tabs">
+        <button class="page-tab-btn active" id="btn-tab-apertura-cierre" type="button">
+          Apertura y Cierre
+        </button>
+        <button class="page-tab-btn" id="btn-tab-historial" type="button">
+          Movimientos
+        </button>
+      </div>
+
+      <!-- PESTAÑA 2: Historial de Movimientos -->
+      <div class="caja-tab-container caja-tab-container-hidden" id="container-historial-movimientos">
+        <div class="caja-layout">
+          <!-- Filtros -->
+          <div class="caja-filters-card">
+            <div class="filter-tabs">
+              <button class="filter-tab-btn active" id="tab-hoy" type="button">Hoy</button>
+              <button class="filter-tab-btn" id="tab-rango" type="button">Rango de fechas</button>
             </div>
-            <div class="caja-shortcuts" style="display:flex; gap:8px; border-left:1px solid var(--border); padding-left:12px; margin-left:4px;">
-              <button type="button" class="btn btn-secondary btn-xs" id="shortcut-semana" style="padding: 6px 10px; font-size: 0.72rem; font-weight: 700; line-height: 1;">Semana en curso</button>
-              <button type="button" class="btn btn-secondary btn-xs" id="shortcut-7dias" style="padding: 6px 10px; font-size: 0.72rem; font-weight: 700; line-height: 1;">Últimos 7 días</button>
-              <button type="button" class="btn btn-secondary btn-xs" id="shortcut-30dias" style="padding: 6px 10px; font-size: 0.72rem; font-weight: 700; line-height: 1;">Últimos 30 días</button>
-            </div>
-          </div>
-          
-          <div class="search-wrap" style="max-width: 320px; width: 100%; margin: 0;">
-            <svg class="search-icon icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-            <input type="text" class="search-input" id="search-caja" placeholder="Buscar por cliente o pedido...">
-          </div>
-        </div>
-        
-        <!-- Resumen -->
-        <div class="caja-summary-grid">
-          <div class="summary-card total-card">
-            <span class="summary-card-title">Balance Neto</span>
-            <span class="summary-card-value" id="sum-total">$0.00</span>
-          </div>
-          <div class="summary-card efectivo-card">
-            <span class="summary-card-title">Efectivo Neto</span>
-            <span class="summary-card-value" id="sum-efectivo">$0.00</span>
-          </div>
-          <div class="summary-card transferencia-card">
-            <span class="summary-card-title">Transferencia Neta</span>
-            <span class="summary-card-value" id="sum-transferencia">$0.00</span>
-          </div>
-          <div class="summary-card tarjeta-card">
-            <span class="summary-card-title">Tarjeta Neta</span>
-            <span class="summary-card-value" id="sum-tarjeta">$0.00</span>
-          </div>
-        </div>
-        
-        <!-- Tabla de Detalle -->
-        <div class="caja-table-card">
-          <div class="caja-table-header">
-            <div>
-              <span class="caja-table-title" id="caja-table-title">Movimientos Registrados</span>
-              <div style="font-size:0.75rem; color:var(--text-secondary); margin-top:4px; display:flex; gap:16px;" id="caja-totals-detail">
-                <span>Ingresos: <strong style="color:var(--success-text);" id="detail-ingresos">$0.00</strong></span>
-                <span>Egresos: <strong style="color:var(--danger-text);" id="detail-egresos">$0.00</strong></span>
+            
+            <div class="date-inputs-container hidden" id="date-inputs">
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span style="font-size:0.85rem; color:var(--text-secondary); font-weight:600;">Desde:</span>
+                <input type="date" class="caja-date-input" id="caja-date-start" value="${hoyStr}">
+                <span style="font-size:0.85rem; color:var(--text-secondary); font-weight:600;">Hasta:</span>
+                <input type="date" class="caja-date-input" id="caja-date-end" value="${hoyStr}">
+              </div>
+              <div class="caja-shortcuts" style="display:flex; gap:8px; border-left:1px solid var(--border); padding-left:12px; margin-left:4px;">
+                <button type="button" class="btn btn-secondary btn-xs" id="shortcut-semana" style="padding: 6px 10px; font-size: 0.72rem; font-weight: 700; line-height: 1;">Semana en curso</button>
+                <button type="button" class="btn btn-secondary btn-xs" id="shortcut-7dias" style="padding: 6px 10px; font-size: 0.72rem; font-weight: 700; line-height: 1;">Últimos 7 días</button>
+                <button type="button" class="btn btn-secondary btn-xs" id="shortcut-30dias" style="padding: 6px 10px; font-size: 0.72rem; font-weight: 700; line-height: 1;">Últimos 30 días</button>
               </div>
             </div>
-            <span style="font-size:0.75rem; font-weight:700; color:var(--text-secondary); background:var(--bg-app); padding:4px 10px; border-radius:var(--radius-full);" id="movements-count">0 movimientos</span>
+            
+            <div class="search-wrap" style="max-width: 320px; width: 100%; margin: 0;">
+              <svg class="search-icon icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+              <input type="text" class="search-input" id="search-caja" placeholder="Buscar por cliente o pedido...">
+            </div>
           </div>
-          <div class="caja-table-wrap">
-            <table class="caja-table">
-              <thead>
-                <tr>
-                  <th id="caja-th-fecha">Fecha y Hora</th>
-                  <th>Tipo</th>
-                  <th>Pedido</th>
-                  <th>Concepto / Cliente</th>
-                  <th>Método de Pago</th>
-                  <th>Registrado Por</th>
-                  <th style="text-align: right;">Monto</th>
-                </tr>
-              </thead>
-              <tbody id="caja-table-body">
-                <tr>
-                  <td colspan="6" style="text-align:center; padding: 40px 0;">
-                    <div class="spinner" style="margin: 0 auto 10px;"></div>
-                    <span style="color:var(--text-secondary);">Cargando movimientos de dinero...</span>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+          
+          <!-- Resumen -->
+          <div class="caja-summary-grid">
+            <div class="summary-card total-card">
+              <span class="summary-card-title">Balance Neto</span>
+              <span class="summary-card-value" id="sum-total">$0.00</span>
+            </div>
+            <div class="summary-card efectivo-card">
+              <span class="summary-card-title">Efectivo Neto</span>
+              <span class="summary-card-value" id="sum-efectivo">$0.00</span>
+            </div>
+            <div class="summary-card transferencia-card">
+              <span class="summary-card-title">Transferencia Neta</span>
+              <span class="summary-card-value" id="sum-transferencia">$0.00</span>
+            </div>
+            <div class="summary-card tarjeta-card">
+              <span class="summary-card-title">Tarjeta Neta</span>
+              <span class="summary-card-value" id="sum-tarjeta">$0.00</span>
+            </div>
+          </div>
+          
+          <!-- Tabla de Detalle -->
+          <div class="caja-table-card">
+            <div class="caja-table-header">
+              <div>
+                <span class="caja-table-title" id="caja-table-title">Movimientos Registrados</span>
+                <div style="font-size:0.75rem; color:var(--text-secondary); margin-top:4px; display:flex; gap:16px;" id="caja-totals-detail">
+                  <span>Ingresos: <strong style="color:var(--success-text);" id="detail-ingresos">$0.00</strong></span>
+                  <span>Egresos: <strong style="color:var(--danger-text);" id="detail-egresos">$0.00</strong></span>
+                </div>
+              </div>
+              <span style="font-size:0.75rem; font-weight:700; color:var(--text-secondary); background:var(--bg-app); padding:4px 10px; border-radius:var(--radius-full);" id="movements-count">0 movimientos</span>
+            </div>
+            <div class="caja-table-wrap">
+              <table class="caja-table">
+                <thead>
+                  <tr>
+                    <th id="caja-th-fecha">Fecha y Hora</th>
+                    <th>Tipo</th>
+                    <th>Pedido</th>
+                    <th>Concepto / Cliente</th>
+                    <th>Método de Pago</th>
+                    <th>Registrado Por</th>
+                    <th style="text-align: right;">Monto</th>
+                  </tr>
+                </thead>
+                <tbody id="caja-table-body">
+                  <tr>
+                    <td colspan="7" style="text-align:center; padding: 40px 0;">
+                      <div class="spinner" style="margin: 0 auto 10px;"></div>
+                      <span style="color:var(--text-secondary);">Cargando movimientos de dinero...</span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- PESTAÑA 1: Apertura y Cierre de Caja -->
+      <div class="caja-tab-container" id="container-apertura-cierre">
+        <div id="apertura-cierre-content">
+          <div style="text-align: center; padding: 40px 0;">
+            <div class="spinner" style="margin: 0 auto 10px;"></div>
+            <span style="color:var(--text-secondary);">Cargando estado del turno de caja...</span>
           </div>
         </div>
       </div>
@@ -348,7 +426,7 @@ export function bindCajaEvents() {
   const dateEnd = document.getElementById('caja-date-end');
   const searchInput = document.getElementById('search-caja');
 
-  // Eventos para Tabs
+  // Eventos para Tabs de Filtros de movimientos
   tabHoy?.addEventListener('click', () => {
     if (activeTab === 'hoy') return;
     activeTab = 'hoy';
@@ -409,16 +487,63 @@ export function bindCajaEvents() {
   // Registrar Egreso btn click
   document.getElementById('btn-nuevo-egreso')?.addEventListener('click', showEgresoModal);
 
+  // Eventos de intercambio de Pestañas Principales de la Página
+  const btnTabHistorial = document.getElementById('btn-tab-historial');
+  const btnTabAperturaCierre = document.getElementById('btn-tab-apertura-cierre');
+  const containerHistorial = document.getElementById('container-historial-movimientos');
+  const containerAperturaCierre = document.getElementById('container-apertura-cierre');
+
+  const updatePageTabUI = () => {
+    if (activePageTab === 'historial') {
+      btnTabHistorial?.classList.add('active');
+      btnTabAperturaCierre?.classList.remove('active');
+      containerHistorial?.classList.remove('caja-tab-container-hidden');
+      containerAperturaCierre?.classList.add('caja-tab-container-hidden');
+    } else {
+      btnTabAperturaCierre?.classList.add('active');
+      btnTabHistorial?.classList.remove('active');
+      containerAperturaCierre?.classList.remove('caja-tab-container-hidden');
+      containerHistorial?.classList.add('caja-tab-container-hidden');
+    }
+  };
+
+  btnTabHistorial?.addEventListener('click', () => {
+    activePageTab = 'historial';
+    updatePageTabUI();
+  });
+
+  btnTabAperturaCierre?.addEventListener('click', () => {
+    activePageTab = 'apertura_cierre';
+    updatePageTabUI();
+  });
+
+  // Inicializar UI de pestañas
+  updatePageTabUI();
+
+  // 1. Escuchar la sesión de caja activa en tiempo real
+  unsubscribeSesionActiva = escucharSesionActiva((sesion) => {
+    sesionActiva = sesion;
+    renderAperturaCierreData();
+  });
+
+  // 2. Escuchar el historial de turnos de caja cerrados
+  unsubscribeHistorialSesiones = escucharHistorialSesiones(50, (sesiones) => {
+    historialSesiones = sesiones;
+    renderAperturaCierreData();
+  });
+
   // Escuchar cambios en los pedidos (tiempo real)
   unsubscribePedidos = escucharPedidosRecientes(500, (pedidos) => {
     allPedidos = pedidos;
     renderCajaData();
+    renderAperturaCierreData();
   });
 
   // Escuchar cambios en los egresos (tiempo real)
   unsubscribeEgresos = escucharEgresos(500, (egresos) => {
     allEgresos = egresos;
     renderCajaData();
+    renderAperturaCierreData();
   });
 }
 
@@ -431,9 +556,20 @@ export function cleanupCaja() {
     unsubscribeEgresos();
     unsubscribeEgresos = null;
   }
+  if (unsubscribeSesionActiva) {
+    unsubscribeSesionActiva();
+    unsubscribeSesionActiva = null;
+  }
+  if (unsubscribeHistorialSesiones) {
+    unsubscribeHistorialSesiones();
+    unsubscribeHistorialSesiones = null;
+  }
   allPedidos = [];
   allEgresos = [];
+  sesionActiva = null;
+  historialSesiones = [];
   activeTab = 'hoy';
+  activePageTab = 'apertura_cierre';
 }
 
 function renderCajaData() {
@@ -685,6 +821,422 @@ function renderCajaData() {
       }
     });
   });
+}
+
+function renderAperturaCierreData() {
+  const contentEl = document.getElementById('apertura-cierre-content');
+  if (!contentEl) return;
+
+  if (!sesionActiva) {
+    // CAJA CERRADA
+    contentEl.innerHTML = `
+      <div style="display: grid; grid-template-columns: 1fr; gap: 24px; max-width: 800px; margin: 0 auto; padding-top: 10px;">
+        
+        <!-- Estado y Formulario de Apertura -->
+        <div class="caja-table-card" style="padding: 30px; border-top: 4px solid var(--accent);">
+          <div style="text-align: center; margin-bottom: 24px;">
+            <div style="display: inline-flex; align-items: center; justify-content: center; width: 56px; height: 56px; border-radius: var(--radius-full); background: var(--danger-subtle); color: var(--danger-text); margin-bottom: 16px;">
+              <svg class="icon icon-xl" style="width:28px; height:28px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+            </div>
+            <h2 style="font-size: 1.3rem; font-weight: 800; color: var(--text-primary); margin-bottom: 4px;">Caja Cerrada</h2>
+          </div>
+
+          <form id="form-abrir-caja" style="max-width: 360px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px;">
+            <div class="form-group" style="margin: 0;">
+              <label class="form-label form-required">Monto Inicial en Efectivo</label>
+              <div style="position: relative; display: flex; align-items: center;">
+                <span style="position: absolute; left: 12px; font-family: var(--font-mono); font-weight: 700; color: var(--text-secondary);">$</span>
+                <input type="number" id="apertura-monto" class="form-input form-mono" style="padding-left: 28px;" step="0.01" min="0" placeholder="0.00" required value="0.00">
+              </div>
+            </div>
+            <button type="submit" class="btn btn-primary" id="btn-abrir-caja-submit" style="width: 100%; margin-top: 8px;">
+              Abrir Caja
+            </button>
+          </form>
+        </div>
+
+        <!-- Historial de Sesiones -->
+        ${renderHistorialSesionesHTML()}
+      </div>
+    `;
+
+    // Vincular evento de apertura
+    document.getElementById('form-abrir-caja')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const montoEl = document.getElementById('apertura-monto');
+      const monto = Number(montoEl?.value);
+      const btn = document.getElementById('btn-abrir-caja-submit');
+
+      if (isNaN(monto) || monto < 0) {
+        showToast('Ingresa un monto inicial válido.', 'error');
+        return;
+      }
+
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<div class="spinner"></div> Abriendo...';
+      }
+
+      try {
+        await abrirSesionCaja({
+          monto_apertura: monto,
+          usuario: getCurrentUserProfile()
+        });
+        showToast('Caja abierta exitosamente.', 'success');
+      } catch (err) {
+        console.error(err);
+        showToast('Error al abrir la caja: ' + err.message, 'error');
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = 'Abrir Caja';
+        }
+      }
+    });
+
+  } else {
+    // CAJA ABIERTA
+    // Calcular totales de la sesión activa
+    const fechaApertura = sesionActiva.fecha_apertura?.toDate 
+      ? sesionActiva.fecha_apertura.toDate() 
+      : (sesionActiva.fecha_apertura?.seconds ? new Date(sesionActiva.fecha_apertura.seconds * 1000) : new Date());
+
+    let ingresosEfectivo = 0;
+    let ingresosTransferencia = 0;
+    let ingresosTarjeta = 0;
+
+    let egresosEfectivo = 0;
+    let egresosTransferencia = 0;
+    let egresosTarjeta = 0;
+
+    const movimientosSesion = [];
+
+    allPedidos.forEach(pedido => {
+      const abonos = pedido.abonos || [];
+      abonos.forEach(abono => {
+        const dateObj = abono.fecha_pago?.toDate ? abono.fecha_pago.toDate() : new Date(abono.fecha_pago || 0);
+        if (dateObj >= fechaApertura) {
+          const monto = Number(abono.monto) || 0;
+          const met = (abono.metodo_pago || 'Efectivo').toLowerCase();
+          
+          if (met === 'efectivo') ingresosEfectivo += monto;
+          else if (met === 'transferencia') ingresosTransferencia += monto;
+          else if (met === 'tarjeta') ingresosTarjeta += monto;
+
+          movimientosSesion.push({
+            id: abono.id_abono,
+            tipo: 'ingreso',
+            concepto: `Abono: ${pedido.id_pedido} - ${pedido.cliente_nombre}`,
+            metodo_pago: abono.metodo_pago || 'Efectivo',
+            monto,
+            fecha: dateObj,
+            usuario: abono.usuario?.nombre || 'Sistema'
+          });
+        }
+      });
+    });
+
+    allEgresos.forEach(egreso => {
+      const dateObj = egreso.fecha?.toDate ? egreso.fecha.toDate() : new Date(egreso.fecha || 0);
+      if (dateObj >= fechaApertura) {
+        const monto = Number(egreso.monto) || 0;
+        const met = (egreso.metodo_pago || 'Efectivo').toLowerCase();
+
+        if (met === 'efectivo') egresosEfectivo += monto;
+        else if (met === 'transferencia') egresosTransferencia += monto;
+        else if (met === 'tarjeta') egresosTarjeta += monto;
+
+        movimientosSesion.push({
+          id: egreso._docId,
+          tipo: 'egreso',
+          concepto: egreso.descripcion || 'Egreso registrado',
+          metodo_pago: egreso.metodo_pago || 'Efectivo',
+          monto,
+          fecha: dateObj,
+          usuario: egreso.usuario?.nombre || 'Sistema'
+        });
+      }
+    });
+
+    movimientosSesion.sort((a, b) => b.fecha - a.fecha);
+
+    const totalIngresos = ingresosEfectivo + ingresosTransferencia + ingresosTarjeta;
+    const totalEgresos = egresosEfectivo + egresosTransferencia + egresosTarjeta;
+    const efectivoEstimado = sesionActiva.monto_apertura + ingresosEfectivo - egresosEfectivo;
+
+    const fechaAperturaStr = fechaApertura.toLocaleString('es-MX', {
+      day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
+    });
+
+    contentEl.innerHTML = `
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 24px; padding-top: 10px;">
+        
+        <!-- Tarjeta de Estado y Resumen Financiero -->
+        <div style="display: flex; flex-direction: column; gap: 20px;">
+          
+          <!-- Estado Caja Abierta -->
+          <div class="caja-table-card" style="padding: 20px; border-top: 4px solid var(--success);">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;">
+              <div>
+                <h2 style="font-size: 1.15rem; font-weight: 800; color: var(--text-primary); margin-bottom: 2px;">Turno de Caja Activo</h2>
+                <div style="font-size: 0.8rem; color: var(--text-secondary); display:flex; flex-direction:column; gap:2px; margin-top:6px;">
+                  <span>Abierto: <strong>${fechaAperturaStr}</strong></span>
+                  <span>Por: <strong>${sesionActiva.usuario_apertura?.nombre || 'Desconocido'}</strong></span>
+                </div>
+              </div>
+              <div style="display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: var(--radius-full); background: var(--success-subtle); color: var(--success-text);">
+                <svg class="icon" style="width:20px; height:20px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 9.9-1"></path></svg>
+              </div>
+            </div>
+
+            <div style="border-top: 1px solid var(--border); padding-top: 16px; display: flex; flex-direction: column; gap: 10px;">
+              <div style="display:flex; justify-content:space-between; font-size:0.9rem;">
+                <span style="color:var(--text-secondary);">Monto Inicial (Efectivo):</span>
+                <span style="font-family:var(--font-mono); font-weight:700;">${formatCurrency(sesionActiva.monto_apertura)}</span>
+              </div>
+              <div style="display:flex; justify-content:space-between; font-size:0.9rem;">
+                <span style="color:var(--text-secondary);">(+) Ingresos Efectivo:</span>
+                <span style="font-family:var(--font-mono); font-weight:700; color:var(--success-text);">+${formatCurrency(ingresosEfectivo)}</span>
+              </div>
+              <div style="display:flex; justify-content:space-between; font-size:0.9rem;">
+                <span style="color:var(--text-secondary);">(-) Egresos Efectivo:</span>
+                <span style="font-family:var(--font-mono); font-weight:700; color:var(--danger-text);">${egresosEfectivo > 0 ? '-' : ''}${formatCurrency(egresosEfectivo)}</span>
+              </div>
+              <div style="display:flex; justify-content:space-between; font-size:1.05rem; border-top: 1.5px dashed var(--border); padding-top: 10px; margin-top: 4px;">
+                <strong style="color:var(--text-primary);">Efectivo Estimado:</strong>
+                <strong style="font-family:var(--font-mono); color:var(--accent);">${formatCurrency(efectivoEstimado)}</strong>
+              </div>
+            </div>
+          </div>
+
+          <!-- Otros Medios de Pago (Conciliación) -->
+          <div class="caja-table-card" style="padding: 20px;">
+            <h3 style="font-size: 0.85rem; font-weight: 800; color: var(--text-secondary); margin-bottom: 16px; text-transform: uppercase; letter-spacing: 0.5px;">Otros Métodos (Sesión)</h3>
+            <div style="display: flex; flex-direction: column; gap: 10px;">
+              <div style="display:flex; justify-content:space-between; font-size:0.9rem;">
+                <span style="color:var(--text-secondary);">Transferencias Netas:</span>
+                <span style="font-family:var(--font-mono); font-weight:700; color:var(--info);">${formatCurrency(ingresosTransferencia - egresosTransferencia)}</span>
+              </div>
+              <div style="display:flex; justify-content:space-between; font-size:0.9rem;">
+                <span style="color:var(--text-secondary);">Tarjetas Netas:</span>
+                <span style="font-family:var(--font-mono); font-weight:700; color:#8e44ad;">${formatCurrency(ingresosTarjeta - egresosTarjeta)}</span>
+              </div>
+              <div style="display:flex; justify-content:space-between; font-size:0.9rem; border-top:1px solid var(--border); padding-top:10px; margin-top:4px;">
+                <span style="color:var(--text-secondary);">Balance General en Turno:</span>
+                <strong style="font-family:var(--font-mono);">${formatCurrency(totalIngresos - totalEgresos)}</strong>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Formulario de Arqueo y Cierre -->
+        <div style="display: flex; flex-direction: column;">
+          
+          <div class="caja-table-card" style="padding: 20px;">
+            <h2 style="font-size: 1.15rem; font-weight: 800; color: var(--text-primary); margin-bottom: 16px;">Arqueo y Cierre</h2>
+            
+            <form id="form-cerrar-caja" style="display: flex; flex-direction: column; gap: 16px;">
+              <div class="form-group" style="margin: 0;">
+                <label class="form-label form-required">Efectivo Real Físico en Caja</label>
+                <div style="position: relative; display: flex; align-items: center;">
+                  <span style="position: absolute; left: 12px; font-family: var(--font-mono); font-weight: 700; color: var(--text-secondary);">$</span>
+                  <input type="number" id="cierre-real" class="form-input form-mono" style="padding-left: 28px;" step="0.01" min="0" placeholder="0.00" required>
+                </div>
+              </div>
+              <div class="form-group" style="margin: 0;">
+                <label class="form-label">Observaciones</label>
+                <textarea id="cierre-observaciones" class="form-input" style="min-height: 80px; resize: vertical;" placeholder="Justifica cualquier descuadre de efectivo..."></textarea>
+              </div>
+              <button type="submit" class="btn btn-primary" id="btn-cerrar-caja-submit" style="width: 100%; margin-top: 8px;">
+                Cerrar Caja
+              </button>
+            </form>
+          </div>
+
+        </div>
+
+        <!-- Movimientos de la Sesión Activa -->
+        <div class="caja-table-card" style="grid-column: 1 / -1;">
+          <div class="caja-table-header" style="padding: 16px 20px;">
+            <span class="caja-table-title" style="font-size: 0.95rem;">Movimientos del Turno Activo</span>
+            <span style="font-size:0.75rem; font-weight:700; color:var(--text-secondary); background:var(--bg-app); padding:4px 10px; border-radius:var(--radius-full);">${movimientosSesion.length} movimientos</span>
+          </div>
+          <div class="caja-table-wrap">
+            <table class="caja-table" style="font-size: 0.85rem;">
+              <thead>
+                <tr>
+                  <th>Hora</th>
+                  <th>Tipo</th>
+                  <th>Concepto</th>
+                  <th>Método</th>
+                  <th>Usuario</th>
+                  <th style="text-align: right;">Monto</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${movimientosSesion.length === 0 
+                  ? `<tr><td colspan="6" style="text-align:center; padding: 24px; color:var(--text-tertiary);">No hay movimientos registrados en este turno.</td></tr>`
+                  : movimientosSesion.map(mov => {
+                      const horaStr = mov.fecha.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+                      const sign = mov.tipo === 'ingreso' ? '+' : '-';
+                      const color = mov.tipo === 'ingreso' ? 'var(--success-text)' : 'var(--danger-text)';
+                      const badgeType = mov.tipo === 'ingreso' 
+                        ? `<span class="badge-metodo badge-efectivo" style="font-size:0.65rem; padding: 1px 6px;">Ingreso</span>`
+                        : `<span class="badge-metodo" style="background:rgba(229,57,53,0.1); color:var(--danger-text); font-size:0.65rem; padding: 1px 6px;">Egreso</span>`;
+                      
+                      let badgeMethod = 'badge-otro';
+                      const met = mov.metodo_pago.toLowerCase();
+                      if (met === 'efectivo') badgeMethod = 'badge-efectivo';
+                      else if (met === 'transferencia') badgeMethod = 'badge-transferencia';
+                      else if (met === 'tarjeta') badgeMethod = 'badge-tarjeta';
+
+                      return `
+                        <tr>
+                          <td>${horaStr}</td>
+                          <td>${badgeType}</td>
+                          <td style="font-weight: 600;">${mov.concepto}</td>
+                          <td><span class="badge-metodo ${badgeMethod}" style="font-size: 0.65rem; padding: 1px 6px;">${mov.metodo_pago}</span></td>
+                          <td>${mov.usuario}</td>
+                          <td style="font-family: var(--font-mono); font-weight:700; text-align: right; color: ${color};">
+                            ${sign}${formatCurrency(mov.monto)}
+                          </td>
+                        </tr>
+                      `;
+                    }).join('')
+                }
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Historial de Sesiones -->
+        <div style="grid-column: 1 / -1;">
+          ${renderHistorialSesionesHTML()}
+        </div>
+      </div>
+    `;
+
+    // Vincular evento de cierre
+    document.getElementById('form-cerrar-caja')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const realEl = document.getElementById('cierre-real');
+      const obsEl = document.getElementById('cierre-observaciones');
+      const real = Number(realEl?.value);
+      const observaciones = obsEl?.value || '';
+      const btn = document.getElementById('btn-cerrar-caja-submit');
+
+      if (isNaN(real) || real < 0) {
+        showToast('Ingresa un monto real de efectivo válido.', 'error');
+        return;
+      }
+
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<div class="spinner"></div> Cerrando turno...';
+      }
+
+      try {
+        await cerrarSesionCaja(sesionActiva._docId, {
+          monto_cierre_efectivo_real: real,
+          observaciones,
+          usuario_cierre: getCurrentUserProfile(),
+          monto_cierre_efectivo_estimado: efectivoEstimado,
+          monto_cierre_transferencia_estimado: ingresosTransferencia - egresosTransferencia,
+          monto_cierre_tarjeta_estimado: ingresosTarjeta - egresosTarjeta
+        });
+        showToast('Turno de caja cerrado exitosamente.', 'success');
+      } catch (err) {
+        console.error(err);
+        showToast('Error al cerrar la caja: ' + err.message, 'error');
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = 'Cerrar Caja';
+        }
+      }
+    });
+  }
+}
+
+function renderHistorialSesionesHTML() {
+  if (historialSesiones.length === 0) {
+    return `
+      <div class="caja-table-card" style="padding: 24px; text-align: center;">
+        <h3 style="font-size: 0.9rem; font-weight: 800; color: var(--text-primary); margin-bottom: 8px;">Historial de Turnos Cerrados</h3>
+        <p style="color: var(--text-tertiary); font-size: 0.85rem;">No se encontraron registros de turnos de caja anteriores.</p>
+      </div>
+    `;
+  }
+
+  const filas = historialSesiones.map(sesion => {
+    const fApertura = sesion.fecha_apertura?.toDate 
+      ? sesion.fecha_apertura.toDate() 
+      : (sesion.fecha_apertura?.seconds ? new Date(sesion.fecha_apertura.seconds * 1000) : new Date());
+      
+    const fCierre = sesion.fecha_cierre?.toDate 
+      ? sesion.fecha_cierre.toDate() 
+      : (sesion.fecha_cierre?.seconds ? new Date(sesion.fecha_cierre.seconds * 1000) : null);
+
+    const fAperturaStr = fApertura.toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit' }) + ' ' + 
+                         fApertura.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+                         
+    const fCierreStr = fCierre 
+      ? fCierre.toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit' }) + ' ' + 
+        fCierre.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })
+      : '-';
+
+    const dif = sesion.diferencia_efectivo || 0;
+    let colorDif = 'var(--text-primary)';
+    let prefijoDif = '';
+    if (dif < 0) {
+      colorDif = 'var(--danger-text)';
+    } else if (dif > 0) {
+      colorDif = 'var(--success-text)';
+      prefijoDif = '+';
+    }
+
+    return `
+      <tr>
+        <td style="color: var(--text-secondary); font-size: 0.8rem;">${fAperturaStr}</td>
+        <td style="color: var(--text-secondary); font-size: 0.8rem;">${fCierreStr}</td>
+        <td style="font-family: var(--font-mono); font-weight: 600;">${formatCurrency(sesion.monto_apertura)}</td>
+        <td style="font-family: var(--font-mono); font-weight: 600;">${formatCurrency(sesion.monto_cierre_efectivo_estimado || 0)}</td>
+        <td style="font-family: var(--font-mono); font-weight: 600;">${formatCurrency(sesion.monto_cierre_efectivo_real || 0)}</td>
+        <td style="font-family: var(--font-mono); font-weight: 700; color: ${colorDif};">${prefijoDif}${formatCurrency(dif)}</td>
+        <td style="max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.8rem; color: var(--text-secondary);" title="${sesion.observaciones || ''}">
+          ${sesion.observaciones || '<span style="color:var(--text-tertiary); font-style:italic;">Sin notas</span>'}
+        </td>
+        <td style="font-size: 0.8rem; color: var(--text-secondary);">${sesion.usuario_cierre?.nombre || sesion.usuario_apertura?.nombre || 'Sistema'}</td>
+      </tr>
+    `;
+  }).join('');
+
+  return `
+    <div class="caja-table-card">
+      <div class="caja-table-header" style="padding: 16px 20px;">
+        <span class="caja-table-title" style="font-size: 0.9rem;">Historial de Turnos Cerrados</span>
+        <span style="font-size:0.72rem; font-weight:700; color:var(--text-secondary); background:var(--bg-app); padding:4px 10px; border-radius:var(--radius-full);">${historialSesiones.length} turnos</span>
+      </div>
+      <div class="caja-table-wrap">
+        <table class="caja-table" style="font-size: 0.85rem;">
+          <thead>
+            <tr>
+              <th>Apertura</th>
+              <th>Cierre</th>
+              <th>Monto Inicial</th>
+              <th>Efectivo Est.</th>
+              <th>Efectivo Real</th>
+              <th>Diferencia</th>
+              <th>Notas</th>
+              <th>Responsable</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${filas}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
 }
 
 function showEgresoModal() {

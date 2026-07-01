@@ -2,7 +2,8 @@ import { renderPedidoCard } from '../components/pedidoCard.js';
 import { showAbonoModal } from '../components/abonoForm.js';
 import {
   buscarPedidos, obtenerPedido,
-  actualizarEstadoProduccion, escucharPedido, escucharPedidosRecientes
+  actualizarEstadoProduccion, escucharPedido, escucharPedidosRecientes,
+  agregarAbono
 } from '../services/pedidos.service.js';
 import { formatCurrency, formatDate } from '../utils/formatters.js';
 import { imprimirRecibo } from '../services/print.service.js';
@@ -409,9 +410,15 @@ function renderDetail(pedido) {
             <div class="alert-blocked-label"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg> Saldo pendiente</div>
             <div class="alert-blocked-amount">${formatCurrency(pedido.saldo_pendiente)}</div>
             <div class="alert-blocked-msg">No se puede entregar sin pago total</div>
-            <button class="btn btn-danger-outline btn-sm" id="btn-add-abono" style="margin-top:14px;">
-              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg> Registrar abono
-            </button>
+            <div style="display: flex; gap: 8px; margin-top: 14px;">
+              <button class="btn btn-danger-outline btn-sm" id="btn-add-abono" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 4px; padding: 6px 4px; font-size: 0.72rem;">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px;"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg> Registrar abono
+              </button>
+              <button class="btn btn-success-outline btn-sm" id="btn-pay-cash-shortcut" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 4px; padding: 6px 4px; font-size: 0.72rem;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px;"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
+                Efectivo
+              </button>
+            </div>
           </div>
         `}
 
@@ -553,6 +560,21 @@ function renderDetail(pedido) {
 
   // Add abono
   document.getElementById('btn-add-abono')?.addEventListener('click', () => showAbonoModal(pedido));
+
+  // Registrar pago rápido en efectivo (liquida todo)
+  document.getElementById('btn-pay-cash-shortcut')?.addEventListener('click', async () => {
+    const totalAbonar = pedido.saldo_pendiente;
+    if (totalAbonar <= 0.001) return;
+    
+    if (!confirm(`¿Confirmar cobro de ${formatCurrency(totalAbonar)} en Efectivo? El pedido quedará saldado.`)) return;
+
+    try {
+      await agregarAbono(pedido._docId, totalAbonar, 'Efectivo', getCurrentUserProfile());
+      showToast('Pedido saldado en efectivo con éxito', 'success');
+    } catch (err) {
+      showToast('Error al registrar abono: ' + err.message, 'error');
+    }
+  });
 
   // Deliver
   document.getElementById('btn-entregar')?.addEventListener('click', async () => {

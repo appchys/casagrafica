@@ -10,10 +10,13 @@ import { renderUsuarios, bindUsuariosEvents, cleanupUsuarios } from './pages/usu
 import { renderHistorial, bindHistorialEvents, cleanupHistorial } from './pages/historial.js';
 import { renderCaja, bindCajaEvents, cleanupCaja } from './pages/caja.js';
 import { obtenerUsuario } from './services/usuarios.service.js';
+import { escucharSesionActiva } from './services/caja.service.js';
 
 const app = document.getElementById('app');
 let currentUser = null;
 let currentCleanup = null;
+let unsubscribeCajaStatus = null;
+let cajaAbiertaGlobal = false;
 
 // ════════════════════════════════
 // TOAST SYSTEM
@@ -185,7 +188,7 @@ function renderPage(user, profile) {
   }
 
   // Renderizar la navegación y contenido
-  const nav = renderNavbar(page, user.email, permissions, profile ? profile.nombre : '');
+  const nav = renderNavbar(page, user.email, permissions, profile ? profile.nombre : '', cajaAbiertaGlobal);
   let content = '';
 
   if (page === 'taller') {
@@ -254,6 +257,24 @@ onAuthStateChanged(auth, async (user) => {
       rol: 'admin',
       permisos: ['crear_pedidos', 'editar_pedidos', 'gestionar_taller', 'gestionar_usuarios', 'gestionar_caja']
     };
+
+    // Suscribir al estado de la caja si aún no lo hemos hecho (bypass)
+    if (!unsubscribeCajaStatus) {
+      unsubscribeCajaStatus = escucharSesionActiva((sesion) => {
+        cajaAbiertaGlobal = !!sesion;
+        const dot = document.getElementById('caja-status-dot');
+        if (dot) {
+          if (cajaAbiertaGlobal) {
+            dot.classList.add('open');
+            dot.title = 'Caja abierta';
+          } else {
+            dot.classList.remove('open');
+            dot.title = 'Caja cerrada';
+          }
+        }
+      });
+    }
+
     if (window.location.pathname === '/' || window.location.pathname === '') {
       history.replaceState(null, '', '/pedidos');
     }
@@ -297,12 +318,34 @@ onAuthStateChanged(auth, async (user) => {
       return;
     }
 
+    // Suscribir al estado de la caja si aún no lo hemos hecho (producción)
+    if (!unsubscribeCajaStatus) {
+      unsubscribeCajaStatus = escucharSesionActiva((sesion) => {
+        cajaAbiertaGlobal = !!sesion;
+        const dot = document.getElementById('caja-status-dot');
+        if (dot) {
+          if (cajaAbiertaGlobal) {
+            dot.classList.add('open');
+            dot.title = 'Caja abierta';
+          } else {
+            dot.classList.remove('open');
+            dot.title = 'Caja cerrada';
+          }
+        }
+      });
+    }
+
     if (window.location.pathname === '/' || window.location.pathname === '') {
       history.replaceState(null, '', '/pedidos');
     }
     renderPage(currentUser, currentProfile);
   } else {
     currentProfile = null;
+    if (unsubscribeCajaStatus) {
+      unsubscribeCajaStatus();
+      unsubscribeCajaStatus = null;
+    }
+    cajaAbiertaGlobal = false;
     if (currentCleanup) { currentCleanup(); currentCleanup = null; }
     renderLoginPage();
   }

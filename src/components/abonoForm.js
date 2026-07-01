@@ -4,23 +4,23 @@ import { showToast, getCurrentUserProfile } from '../main.js';
 
 /**
  * Renders the custom abono form as a modal dialog for a new order.
- * @param {number} totalPedido 
+ * @param {number} saldoPendiente 
  * @param {number|string} montoActual 
  * @param {string} metodoActual 
  */
-export function renderAbonoFormModal(totalPedido, montoActual = '', metodoActual = 'Efectivo') {
+export function renderAbonoFormModal(saldoPendiente, montoActual = '', metodoActual = 'Efectivo') {
   return `
     <div class="modal-overlay" id="abono-form-modal" style="display: flex;">
       <div class="modal-card" style="margin: auto; max-width: 420px; width: 100%;">
-        <div class="modal-title" style="font-size: 1.15rem; font-weight: 800; color: var(--text-primary);">Registrar Abono Parcial</div>
+        <div class="modal-title" style="font-size: 1.15rem; font-weight: 800; color: var(--text-primary);">Registrar Abono</div>
         <div class="modal-sub" style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 18px;">
-          Total del pedido: <strong style="color:var(--text-primary); font-family:var(--font-mono);">${formatCurrency(totalPedido)}</strong>
+          Saldo pendiente: <strong style="color:var(--text-primary); font-family:var(--font-mono);">${formatCurrency(saldoPendiente)}</strong>
         </div>
 
         <div class="form-group">
           <label class="form-label form-required">Monto del abono</label>
           <input type="number" class="form-input form-mono" id="abono-modal-monto"
-            min="0.01" max="${totalPedido}" step="0.01" placeholder="0.00" value="${montoActual || ''}" autofocus />
+            min="0.01" max="${saldoPendiente}" step="0.01" placeholder="0.00" value="${montoActual || ''}" autofocus />
         </div>
         <div class="form-group">
           <label class="form-label">Método de pago</label>
