@@ -113,7 +113,7 @@ service cloud.firestore {
         'id_pedido', 'cliente_id', 'cliente_nombre', 'cliente_telefono',
         'productos', 'abonos', 'total_pagar', 'total_abonado',
         'saldo_pendiente', 'estado_pago', 'estado_produccion', 'fecha_creacion',
-        'notas', 'updated_at', 'default_estado_pago', 'historial_estados', 'fecha_entrega'
+        'notas', 'updated_at', 'default_estado_pago', 'historial_estados', 'fecha_entrega', 'adjuntos'
       ]) &&
       isValidString(data.id_pedido, 20) &&
       isValidString(data.cliente_id, 128) &&
@@ -131,7 +131,8 @@ service cloud.firestore {
       (!('updated_at' in data) || data.updated_at is timestamp) &&
       (!('default_estado_pago' in data) || isValidString(data.default_estado_pago, 32)) &&
       (!('historial_estados' in data) || data.historial_estados is list) &&
-      (!('fecha_entrega' in data) || data.fecha_entrega is timestamp || data.fecha_entrega == null);
+      (!('fecha_entrega' in data) || data.fecha_entrega is timestamp || data.fecha_entrega == null) &&
+      (!('adjuntos' in data) || data.adjuntos is list);
     }
 
     function isValidCliente(data) {

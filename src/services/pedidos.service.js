@@ -1,8 +1,10 @@
-import { db } from '../firebase.js';
+import { db, storage } from '../firebase.js';
 import {
   collection, doc, setDoc, getDoc, getDocs, updateDoc, deleteDoc,
-  query, where, orderBy, onSnapshot, Timestamp, limit, runTransaction
+  query, where, orderBy, onSnapshot, Timestamp, limit, runTransaction,
+  arrayUnion, arrayRemove
 } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import {
   calcularSubtotal, calcularTotalPagar, calcularTotalAbonado,
   calcularSaldoPendiente, determinarEstadoPago, recalcularOrden
@@ -407,4 +409,57 @@ export function escucharPedidosRecientes(maxResults = 20, callback) {
 
 export async function eliminarPedido(docId) {
   await deleteDoc(doc(db, COLECCION, docId));
+}
+
+export async function adjuntarArchivoAPedido(pedidoId, file, usuario) {
+  // Generar un nombre único para evitar colisiones
+  const cleanName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+  const timestamp = Date.now();
+  const storagePath = `pedidos/${pedidoId}/${timestamp}_${cleanName}`;
+  const storageRef = ref(storage, storagePath);
+
+  // Subir el archivo
+  await uploadBytes(storageRef, file);
+
+  // Obtener URL de descarga
+  const downloadURL = await getDownloadURL(storageRef);
+
+  // Guardar en Firestore en el array 'adjuntos'
+  const pedidoRef = doc(db, COLECCION, pedidoId);
+  const nuevoAdjunto = {
+    nombre: file.name,
+    url: downloadURL,
+    tipo: file.type,
+    fecha: new Date().toISOString(),
+    usuario: usuario ? {
+      uid: usuario.uid || '',
+      nombre: usuario.nombre || '',
+      email: usuario.email || ''
+    } : null
+  };
+
+  await updateDoc(pedidoRef, {
+    adjuntos: arrayUnion(nuevoAdjunto)
+  });
+
+  return nuevoAdjunto;
+}
+
+export async function eliminarAdjuntoPedido(pedidoId, adjuntoObj) {
+  const pedidoRef = doc(db, COLECCION, pedidoId);
+  
+  // Eliminar de Firestore
+  await updateDoc(pedidoRef, {
+    adjuntos: arrayRemove(adjuntoObj)
+  });
+
+  // Intentar borrar físicamente de Firebase Storage
+  if (adjuntoObj.url && adjuntoObj.url.includes('firebasestorage.googleapis.com')) {
+    try {
+      const fileRef = ref(storage, adjuntoObj.url);
+      await deleteObject(fileRef);
+    } catch (err) {
+      console.warn('Error al eliminar archivo físico de Storage:', err);
+    }
+  }
 }

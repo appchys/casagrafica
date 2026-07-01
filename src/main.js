@@ -52,7 +52,7 @@ function renderLoginPage(errorMsg = '') {
     <div class="login-page">
       <!-- Left panel — branding -->
       <div class="login-left">
-        <div class="login-logo-mark">CG</div>
+        <img src="/logoblanco.png" alt="Casa Gráfica" class="login-logo" />
         <h1 class="login-title">Casa <span>Gráfica</span></h1>
         <p class="login-desc">Sistema interno de gestión de pedidos, producción y entregas</p>
       </div>
@@ -144,7 +144,8 @@ function renderPage(user, profile) {
   if (page === 'pedidos' || page === 'historial') {
     authorized = permissions.includes('crear_pedidos') || permissions.includes('editar_pedidos');
   } else if (page === 'taller') {
-    authorized = permissions.includes('gestionar_taller');
+    authorized = permissions.includes('gestionar_taller') || 
+                 (!!docId && (permissions.includes('crear_pedidos') || permissions.includes('editar_pedidos')));
   } else if (page === 'usuarios') {
     authorized = permissions.includes('gestionar_usuarios');
   } else if (page === 'caja') {
@@ -306,6 +307,141 @@ onAuthStateChanged(auth, async (user) => {
     renderLoginPage();
   }
 });
+
+// Función global para adjuntar archivos a pedidos y evitar propagación
+window.abrirAdjuntosPedido = async (pedidoId, attachBtn) => {
+  // Crear un input file dinámico
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.multiple = true;
+  input.style.display = 'none';
+
+  input.onchange = async () => {
+    if (!input.files || input.files.length === 0) return;
+    
+    const files = Array.from(input.files);
+    showToast(`Subiendo ${files.length} archivo(s)...`, 'info');
+
+    // Deshabilitar temporalmente el botón e indicar carga
+    const originalInner = attachBtn.innerHTML;
+    attachBtn.disabled = true;
+    attachBtn.innerHTML = '<div class="spinner" style="width:12px; height:12px; border-width:1.5px; border-top-color:var(--text-primary); border-bottom-color:transparent; border-left-color:transparent; border-right-color:transparent; display:inline-block;"></div>';
+
+    try {
+      const { adjuntarArchivoAPedido } = await import('./services/pedidos.service.js');
+      
+      for (const file of files) {
+        await adjuntarArchivoAPedido(pedidoId, file, currentProfile);
+      }
+
+      showToast('Archivo(s) adjuntado(s) correctamente', 'success');
+    } catch (err) {
+      console.error(err);
+      showToast('Error al subir los archivos', 'error');
+    } finally {
+      attachBtn.disabled = false;
+      attachBtn.innerHTML = originalInner;
+    }
+  };
+
+  document.body.appendChild(input);
+  input.click();
+  input.remove();
+};
+
+// Función global para mostrar el detalle de un archivo adjunto
+window.mostrarDetalleAdjunto = (nombre, url, tipo, subidoPor, fechaSubida) => {
+  document.getElementById('detalle-adjunto-modal')?.remove();
+
+  const extension = nombre.split('.').pop().toLowerCase();
+  const esImagen = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(extension) || (tipo && tipo.startsWith('image/'));
+  const esIllustrator = extension === 'ai';
+
+  let fechaHoraStr = 'Desconocida';
+  if (fechaSubida) {
+    try {
+      const d = new Date(fechaSubida);
+      fechaHoraStr = d.toLocaleString('es-MX', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+      });
+    } catch (e) {
+      fechaHoraStr = 'Desconocida';
+    }
+  }
+
+  const previewHTML = esIllustrator
+    ? `
+      <div style="text-align: center; margin-bottom: 20px; border-radius: var(--radius-lg); overflow: hidden; border: 1px solid var(--border); background: #fafafa; height: 400px; display: flex; flex-direction: column;">
+        <iframe src="https://docs.google.com/viewer?url=${encodeURIComponent(url)}&embedded=true" style="width: 100%; height: 100%; border: none; border-radius: var(--radius-md);"></iframe>
+      </div>
+    `
+    : esImagen
+      ? `
+        <div style="text-align: center; margin-bottom: 20px; border-radius: var(--radius-lg); overflow: hidden; border: 1px solid var(--border); background: #fafafa; padding: 10px; display: flex; align-items: center; justify-content: center; min-height: 150px;">
+          <img src="${url}" alt="${nombre}" style="max-height: 250px; max-width: 100%; object-fit: contain; border-radius: var(--radius-md);" />
+        </div>
+      `
+      : `
+        <div style="text-align: center; margin-bottom: 20px; border-radius: var(--radius-lg); border: 1px solid var(--border); background: #fafafa; padding: 30px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="var(--text-tertiary)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="width: 48px; height: 48px;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+          <div style="font-size: 0.8rem; color: var(--text-secondary); word-break: break-all;">${tipo || 'Archivo binario'}</div>
+        </div>
+      `;
+
+  const modalHTML = `
+    <div class="modal-overlay" id="detalle-adjunto-modal" style="display: flex;">
+      <div class="modal-card" style="margin: auto; max-width: ${esIllustrator ? '640px' : '400px'}; width: 100%;">
+        <div class="modal-title" style="font-size: 1.15rem; font-weight: 800; color: var(--text-primary); text-align: center; margin-bottom: 16px;">
+          Detalle de Archivo
+        </div>
+        
+        ${previewHTML}
+        
+        <div style="font-size: 0.85rem; margin-bottom: 24px; padding: 12px; background: #f9f9f9; border-radius: var(--radius-md); border: 1px solid #eee;">
+          <div style="display:flex; justify-content:space-between; margin-bottom: 6px; gap: 10px;">
+            <span style="color: var(--text-tertiary); font-weight:500;">Nombre:</span>
+            <span style="color: var(--text-primary); font-weight:700; word-break: break-all; text-align: right;">${nombre}</span>
+          </div>
+          <div style="display:flex; justify-content:space-between; margin-bottom: 6px; gap: 10px;">
+            <span style="color: var(--text-tertiary); font-weight:500;">Subido por:</span>
+            <span style="color: var(--text-secondary); word-break: break-all; text-align: right;">${subidoPor || 'SISTEMA'}</span>
+          </div>
+          <div style="display:flex; justify-content:space-between; gap: 10px;">
+            <span style="color: var(--text-tertiary); font-weight:500;">Fecha y Hora:</span>
+            <span style="color: var(--text-secondary); word-break: break-all; text-align: right;">${fechaHoraStr}</span>
+          </div>
+        </div>
+        
+        <div class="modal-actions" style="margin-top: 0;">
+          <button type="button" class="btn btn-secondary" id="modal-adjunto-close" style="flex: 1;">Cerrar</button>
+          <a href="${url}" target="_blank" download="${nombre}" class="btn btn-primary" id="modal-adjunto-download" style="flex: 1; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; gap: 6px;">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+            Descargar
+          </a>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.body.insertAdjacentHTML('beforeend', modalHTML);
+
+  const modal = document.getElementById('detalle-adjunto-modal');
+  const closeBtn = document.getElementById('modal-adjunto-close');
+  const downloadLink = document.getElementById('modal-adjunto-download');
+
+  const removeModal = () => modal?.remove();
+
+  closeBtn?.addEventListener('click', removeModal);
+  downloadLink?.addEventListener('click', removeModal);
+  modal?.addEventListener('click', (e) => {
+    if (e.target === modal) removeModal();
+  });
+};
 
 // Intercept all internal relative link clicks to handle SPA routing via History API
 document.addEventListener('click', (e) => {

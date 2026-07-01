@@ -1,5 +1,6 @@
 import { escucharPedidosRecientes, eliminarPedido } from '../services/pedidos.service.js';
 import { renderPedidoCard } from '../components/pedidoCard.js';
+import { showAbonoModal } from '../components/abonoForm.js';
 import { formatCurrency } from '../utils/formatters.js';
 import { showToast, getCurrentUserProfile } from '../main.js';
 import { imprimirRecibo } from '../services/print.service.js';
@@ -206,6 +207,18 @@ function renderFilteredHistory() {
   // Click on cards or card actions
   rightPane.querySelectorAll('.pedido-card').forEach(card => {
     card.addEventListener('click', (e) => {
+      // Check if abono amount was clicked
+      const abonoBtn = e.target.closest('.pedido-card-amount-action');
+      if (abonoBtn) {
+        e.stopPropagation();
+        const docId = abonoBtn.dataset.abonoPedidoId;
+        const ped = allPedidos.find(p => p._docId === docId);
+        if (ped) {
+          showAbonoModal(ped);
+        }
+        return;
+      }
+
       // Toggle card dropdown
       const toggle = e.target.closest('[data-card-dropdown-toggle]');
       if (toggle) {

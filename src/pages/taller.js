@@ -1,7 +1,7 @@
 import { renderPedidoCard } from '../components/pedidoCard.js';
-import { renderAbonoModal } from '../components/abonoForm.js';
+import { showAbonoModal } from '../components/abonoForm.js';
 import {
-  buscarPedidos, obtenerPedido, agregarAbono,
+  buscarPedidos, obtenerPedido,
   actualizarEstadoProduccion, escucharPedido, escucharPedidosRecientes
 } from '../services/pedidos.service.js';
 import { formatCurrency, formatDate } from '../utils/formatters.js';
@@ -9,6 +9,7 @@ import { imprimirRecibo } from '../services/print.service.js';
 import { showToast, getCurrentUserProfile } from '../main.js';
 
 let unsubscribe = null;
+let allPedidos = [];
 let colapsados = { PENDIENTE: false, LISTO: false, ENTREGADO: true };
 
 /**
@@ -50,17 +51,15 @@ export function bindTallerEvents(initialDocId) {
   let debounce;
   document.getElementById('search-taller')?.addEventListener('input', (e) => {
     clearTimeout(debounce);
-    const term = e.target.value.trim();
     debounce = setTimeout(() => {
-      if (term.length >= 2) doSearch(term);
-      else if (term.length === 0) loadRecent();
-    }, 300);
+      renderFilteredTaller();
+    }, 280);
   });
 
   document.getElementById('btn-ver-todos')?.addEventListener('click', () => {
     const input = document.getElementById('search-taller');
     if (input) input.value = '';
-    loadRecent();
+    renderFilteredTaller();
   });
 
   // If arriving from a card click, load that pedido directly
@@ -73,6 +72,7 @@ export function bindTallerEvents(initialDocId) {
 
 export function cleanupTaller() {
   if (unsubscribe) { unsubscribe(); unsubscribe = null; }
+  allPedidos = [];
 }
 
 // ── Data loading ──
@@ -86,25 +86,25 @@ async function loadRecent() {
   content.innerHTML = `<div class="loading-center"><div class="spinner spinner-lg"></div><span>Cargando pedidos...</span></div>`;
 
   try {
-    unsubscribe = escucharPedidosRecientes(20, (pedidos) => {
-      showList(pedidos);
+    unsubscribe = escucharPedidosRecientes(300, (pedidos) => {
+      allPedidos = pedidos;
+      renderFilteredTaller();
     });
   } catch (err) {
     content.innerHTML = `<div class="empty-state"><div class="empty-icon" style="color:var(--danger-text);"><svg class="icon icon-xl" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg></div><div class="empty-title">Error al cargar</div><div class="empty-msg">${err.message}</div></div>`;
   }
 }
 
-async function doSearch(term) {
-  const content = document.getElementById('taller-content');
-  if (!content) return;
-  content.innerHTML = `<div class="loading-center"><div class="spinner spinner-lg"></div><span>Buscando...</span></div>`;
+function renderFilteredTaller() {
+  const searchTerm = document.getElementById('search-taller')?.value.trim().toLowerCase() || '';
 
-  try {
-    const results = await buscarPedidos(term);
-    showList(results, term);
-  } catch (err) {
-    showToast('Error en búsqueda: ' + err.message, 'error');
-  }
+  const filtered = allPedidos.filter(p => {
+    return !searchTerm ||
+      p.cliente_nombre.toLowerCase().includes(searchTerm) ||
+      p.id_pedido.toLowerCase().includes(searchTerm);
+  });
+
+  showList(filtered, searchTerm);
 }
 
 function showList(pedidos, searchTerm = '') {
@@ -203,6 +203,17 @@ function showList(pedidos, searchTerm = '') {
         return;
       }
 
+      // Check if abono amount was clicked
+      const abonoBtn = e.target.closest('.pedido-card-amount-action');
+      if (abonoBtn) {
+        const docId = abonoBtn.dataset.abonoPedidoId;
+        const ped = pedidos.find(p => p._docId === docId);
+        if (ped) {
+          showAbonoModal(ped);
+        }
+        return;
+      }
+
       // Check if action button was clicked
       const actionBtn = e.target.closest('.taller-card-action');
       if (actionBtn) {
@@ -270,6 +281,39 @@ function renderDetail(pedido) {
     </tr>
   `).join('');
 
+  const adjuntos = pedido.adjuntos || [];
+  const adjuntosHTML = adjuntos.length > 0
+    ? adjuntos.map((adj, index) => {
+        const extension = adj.nombre.split('.').pop().toLowerCase();
+        const esImagen = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(extension);
+        const iconHTML = esImagen
+          ? `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px; color:var(--text-tertiary);"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>`
+          : `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px; color:var(--text-tertiary);"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>`;
+        
+        const fechaStr = adj.fecha ? new Date(adj.fecha).toLocaleDateString('es-MX') : '—';
+        const subidoPor = adj.usuario && adj.usuario.nombre ? adj.usuario.nombre : 'SISTEMA';
+
+        return `
+          <div style="display:flex; align-items:center; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--border); gap:12px;">
+            <div style="display:flex; align-items:center; gap:8px; overflow:hidden; flex:1;">
+              ${iconHTML}
+              <span class="attachment-link-detail" onclick="event.stopPropagation(); window.mostrarDetalleAdjunto('${adj.nombre.replace(/'/g, "\\'")}', '${adj.url}', '${adj.tipo || ''}', '${subidoPor.replace(/'/g, "\\'")}', '${adj.fecha || ''}')" title="Ver detalles de ${adj.nombre}" style="font-size:0.85rem; font-weight:600; color:var(--text-primary); cursor:pointer; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-decoration:none;" onmouseover="this.style.color='var(--accent)'" onmouseout="this.style.color='var(--text-primary)'">
+                ${adj.nombre}
+              </span>
+            </div>
+            <div style="display:flex; align-items:center; gap:10px; flex-shrink:0;">
+              <span style="font-size:0.75rem; color:var(--text-tertiary);" title="Subido por: ${subidoPor}">${fechaStr}</span>
+              <a href="${adj.url}" target="_blank" download="${adj.nombre}" class="btn btn-ghost btn-xs" title="Descargar" style="padding:4px; display:flex; align-items:center; justify-content:center; border:none; background:transparent;">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px; height:14px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+              </a>
+              <button type="button" class="btn btn-ghost btn-xs btn-delete-attachment" data-adj-idx="${index}" title="Eliminar" style="padding:4px; display:flex; align-items:center; justify-content:center; color:var(--danger-text); background:transparent; border:none; cursor:pointer;">
+                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px; height:14px;"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('')
+    : `<div style="text-align:center; padding:16px 0; color:var(--text-tertiary); font-size:0.85rem;">No hay archivos adjuntos en este pedido.</div>`;
 
   content.innerHTML = `
     <!-- Back -->
@@ -330,6 +374,20 @@ function renderDetail(pedido) {
             <p style="color:var(--text-secondary); font-size:0.9rem;">${pedido.notas}</p>
           </div>
         ` : ''}
+
+        <!-- Adjuntos -->
+        <div class="card card-padded">
+          <div style="font-size:0.75rem; font-weight:700; color:var(--text-tertiary); text-transform:uppercase; margin-bottom:12px; display:flex; justify-content:space-between; align-items:center;">
+            <span>Archivos Adjuntos</span>
+            <button type="button" class="btn btn-ghost btn-sm" id="btn-attach-detail" style="padding: 2px 6px; font-size: 0.75rem; display:flex; align-items:center; gap:4px; background:var(--bg-hover); border:1px solid var(--border); border-radius:4px; cursor:pointer;">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:12px; height:12px;"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
+              Adjuntar
+            </button>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:2px;">
+            ${adjuntosHTML}
+          </div>
+        </div>
 
         <!-- Estado de producción -->
         <div class="card card-padded">
@@ -438,6 +496,41 @@ function renderDetail(pedido) {
     imprimirRecibo(pedido);
   });
 
+  // Attach button in detail
+  document.getElementById('btn-attach-detail')?.addEventListener('click', () => {
+    const attachBtn = document.getElementById('btn-attach-detail');
+    if (attachBtn) {
+      window.abrirAdjuntosPedido(pedido._docId, attachBtn);
+    }
+  });
+
+  // Delete attachment buttons in detail
+  content.querySelectorAll('.btn-delete-attachment').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const idx = parseInt(btn.dataset.adjIdx, 10);
+      const adjunto = pedido.adjuntos[idx];
+      if (!adjunto) return;
+
+      if (confirm(`¿Estás seguro de que deseas eliminar el archivo "${adjunto.nombre}"?`)) {
+        btn.disabled = true;
+        const originalColor = btn.style.color;
+        btn.style.color = 'var(--text-tertiary)';
+        
+        try {
+          const { eliminarAdjuntoPedido } = await import('../services/pedidos.service.js');
+          await eliminarAdjuntoPedido(pedido._docId, adjunto);
+          showToast('Archivo eliminado', 'success');
+        } catch (err) {
+          console.error(err);
+          showToast('Error al eliminar archivo', 'error');
+          btn.disabled = false;
+          btn.style.color = originalColor;
+        }
+      }
+    });
+  });
+
   // Estado tabs
   content.querySelectorAll('.estado-tab').forEach(btn => {
     btn.addEventListener('click', async () => {
@@ -470,37 +563,6 @@ function renderDetail(pedido) {
     } catch (err) { showToast('Error: ' + err.message, 'error'); }
   });
 }
-
-function showAbonoModal(pedido) {
-  document.getElementById('abono-modal')?.remove();
-
-  // Import inline to avoid circular
-  import('../components/abonoForm.js').then(({ renderAbonoModal }) => {
-    document.body.insertAdjacentHTML('beforeend', renderAbonoModal(pedido));
-
-    const modal = document.getElementById('abono-modal');
-
-    document.getElementById('modal-cancel')?.addEventListener('click', () => modal?.remove());
-    modal?.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
-
-    document.getElementById('modal-confirm')?.addEventListener('click', async () => {
-      const monto = Number(document.getElementById('modal-abono-monto')?.value);
-      const metodo = document.getElementById('modal-abono-metodo')?.value || 'Efectivo';
-
-      if (!monto || monto <= 0) { showToast('Ingresa un monto válido', 'error'); return; }
-      if (monto > pedido.saldo_pendiente + 0.001) { showToast('El monto excede el saldo pendiente', 'error'); return; }
-
-      try {
-        await agregarAbono(pedido._docId, monto, metodo, getCurrentUserProfile());
-        showToast(`Abono de ${formatCurrency(monto)} registrado`, 'success');
-        modal?.remove();
-      } catch (err) { showToast('Error: ' + err.message, 'error'); }
-    });
-
-    setTimeout(() => document.getElementById('modal-abono-monto')?.focus(), 80);
-  });
-}
-
 async function handleCardAction(pedido, action) {
   if (action === 'comenzar') {
     try {

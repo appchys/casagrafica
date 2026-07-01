@@ -652,6 +652,29 @@ a { color: var(--accent); text-decoration:none; }
   height: 14px;
 }
 
+.btn-attach-card {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: var(--radius-xs);
+  transition: all var(--t-fast);
+}
+
+.btn-attach-card:hover {
+  background: var(--bg-hover, #eee);
+  color: var(--text-primary);
+}
+
+.btn-attach-card svg {
+  width: 14px;
+  height: 14px;
+}
+
 .pedido-card-name {
   font-size: 1rem;
   font-weight: 700;
@@ -1209,6 +1232,14 @@ a { color: var(--accent); text-decoration:none; }
   color: white;
   box-shadow: 0 8px 24px rgba(229,57,53,0.35);
   margin-bottom: 8px;
+}
+
+.login-logo {
+  height: 64px;
+  width: auto;
+  max-width: 240px;
+  object-fit: contain;
+  margin-bottom: 16px;
 }
 
 .login-title {
@@ -2364,6 +2395,7 @@ a { color: var(--accent); text-decoration:none; }
 /* Ocultar acciones de tarjeta por defecto en escritorio, mostrar al hacer hover. En móviles se muestran siempre */
 @media (hover: hover) {
   .pedido-card .btn-print-card,
+  .pedido-card .btn-attach-card,
   .pedido-card .product-dropdown,
   .pedido-card .pedido-card-wa-link {
     opacity: 0;
@@ -2372,6 +2404,7 @@ a { color: var(--accent); text-decoration:none; }
   }
 
   .pedido-card:hover .btn-print-card,
+  .pedido-card:hover .btn-attach-card,
   .pedido-card:hover .product-dropdown,
   .pedido-card:hover .pedido-card-wa-link {
     opacity: 1;
@@ -2379,5 +2412,24 @@ a { color: var(--accent); text-decoration:none; }
   }
 }
 
-
-
+/* Indicador interactivo de abonos */
+.pedido-card-amount-action {
+  cursor: pointer;
+  padding: 3px 6px;
+  background: rgba(229, 57, 53, 0.08);
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all var(--t-fast, 0.15s) ease-in-out;
+  border: 1px solid rgba(229, 57, 53, 0.15);
+  user-select: none;
+}
+.pedido-card-amount-action:hover {
+  background: rgba(229, 57, 53, 0.15);
+  border-color: rgba(229, 57, 53, 0.3);
+  transform: translateY(-1px);
+}
+.pedido-card-amount-action:active {
+  transform: translateY(0);
+}

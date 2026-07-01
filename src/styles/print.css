@@ -198,10 +198,11 @@
     width: 65px;
   }
 
-  /* Pending Box (Black background, white text) */
+  /* Pending Box (Border only, black text) */
   .receipt-pending-box {
-    background-color: #000 !important;
-    color: #fff !important;
+    border: 2.5px solid #000 !important;
+    background-color: transparent !important;
+    color: #000 !important;
     padding: 1.5mm 2mm;
     margin-top: 1mm;
     font-weight: 800;
@@ -211,12 +212,12 @@
 
   .receipt-pending-label {
     font-weight: 800;
-    color: #fff !important;
+    color: #000 !important;
   }
 
   .receipt-pending-val {
     font-weight: 800;
-    color: #fff !important;
+    color: #000 !important;
     display: inline-flex;
     justify-content: space-between;
     width: 65px;

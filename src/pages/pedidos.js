@@ -1,5 +1,5 @@
 import { renderProductForm, renderProductListRow, createEmptyProduct } from '../components/productForm.js';
-import { renderAbonoFormModal } from '../components/abonoForm.js';
+import { renderAbonoFormModal, showAbonoModal } from '../components/abonoForm.js';
 import { calcularSubtotal, calcularTotalPagar } from '../utils/calculations.js';
 import { formatCurrency, formatDate } from '../utils/formatters.js';
 import { crearPedido, actualizarPedido, obtenerPedido, obtenerPedidosRecientes, obtenerTiposProducto, eliminarPedido, escucharPedidosRecientes } from '../services/pedidos.service.js';
@@ -301,7 +301,7 @@ async function loadPedidos() {
   }
 
   try {
-    unsubscribePedidos = escucharPedidosRecientes(50, (pedidos) => {
+    unsubscribePedidos = escucharPedidosRecientes(300, (pedidos) => {
       allPedidos = pedidos;
       renderFilteredList();
     });
@@ -447,7 +447,7 @@ function renderFilteredList() {
   // Bind click to each card → navigate to taller with this pedido
   list.querySelectorAll('.pedido-card').forEach(card => {
     card.addEventListener('click', (e) => {
-      if (e.target.closest('.product-dropdown') || e.target.closest('[data-card-print]')) return;
+      if (e.target.closest('.product-dropdown') || e.target.closest('[data-card-print]') || e.target.closest('.pedido-card-amount-action')) return;
       const docId = card.dataset.docId;
       history.pushState(null, '', `/taller/${docId}`);
       window.dispatchEvent(new PopStateEvent('popstate'));
@@ -1321,6 +1321,17 @@ export function bindPedidosEvents() {
       document.querySelectorAll('.product-dropdown-menu.open').forEach(m => m.classList.remove('open'));
       const menu = document.getElementById(menuId);
       if (menu) menu.classList.toggle('open');
+      return;
+    }
+
+    // Registrar abono desde indicador de saldo
+    const abonoBtn = e.target.closest('.pedido-card-amount-action');
+    if (abonoBtn) {
+      const docId = abonoBtn.dataset.abonoPedidoId;
+      const ped = allPedidos.find(p => p._docId === docId);
+      if (ped) {
+        showAbonoModal(ped);
+      }
       return;
     }
 

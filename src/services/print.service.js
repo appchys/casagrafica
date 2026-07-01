@@ -5,6 +5,13 @@ import { formatCurrency, formatDate } from '../utils/formatters.js';
  * Prints two identical copies: Cliente + Taller, separated by page break (triggers cutter)
  */
 export function generarReciboHTML(pedido) {
+  // Obtener usuario creador y limitar a los 2 primeros nombres
+  const creadorEvent = (pedido.historial_estados || []).find(h => h.tipo === 'creacion');
+  const nombreUsuario = (creadorEvent && creadorEvent.usuario && (creadorEvent.usuario.nombre || creadorEvent.usuario.email))
+    ? (creadorEvent.usuario.nombre || creadorEvent.usuario.email)
+    : 'SISTEMA';
+  const atendidoPor = nombreUsuario.trim().split(/\s+/).slice(0, 2).join(' ').toUpperCase();
+
   // Formatear los productos en el HTML del ticket
   const productosHTML = pedido.productos.map(p => `
     <div class="receipt-product-item">
@@ -35,6 +42,7 @@ export function generarReciboHTML(pedido) {
         <div class="receipt-client-label">CLIENTE</div>
         <div class="receipt-client-name">${pedido.cliente_nombre.toUpperCase()}</div>
         <div class="receipt-date">FECHA: ${formatDate(pedido.fecha_creacion).toUpperCase()}</div>
+        <div class="receipt-date">ATENDIDO POR: ${atendidoPor}</div>
       </div>
       
       <div class="receipt-divider-solid"></div>
