@@ -9,6 +9,7 @@ export function renderNavbar(currentPage, userEmail, permissions = [], userName 
   const showTaller = permissions.includes('gestionar_taller');
   const showUsuarios = permissions.includes('gestionar_usuarios');
   const showCaja = permissions.includes('gestionar_caja');
+  const showPorCobrar = permissions.includes('ver_por_cobrar');
 
   return `
     <nav class="navbar" id="main-navbar">
@@ -59,6 +60,19 @@ export function renderNavbar(currentPage, userEmail, permissions = [], userName 
               <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
             </span>
             <span class="nav-label">Historial</span>
+          </a>
+        </li>
+        ` : ''}
+        ${showPorCobrar ? `
+        <li>
+          <a href="/por-cobrar" class="drawer-nav-item ${currentPage === 'por-cobrar' ? 'active' : ''}">
+            <span class="nav-icon" style="display:inline-flex; align-items:center;">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="12" y1="1" x2="12" y2="23"></line>
+                <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+              </svg>
+            </span>
+            <span class="nav-label">Por cobrar</span>
           </a>
         </li>
         ` : ''}

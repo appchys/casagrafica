@@ -9,6 +9,7 @@ import { renderTaller, bindTallerEvents, cleanupTaller } from './pages/taller.js
 import { renderUsuarios, bindUsuariosEvents, cleanupUsuarios } from './pages/usuarios.js';
 import { renderHistorial, bindHistorialEvents, cleanupHistorial } from './pages/historial.js';
 import { renderCaja, bindCajaEvents, cleanupCaja } from './pages/caja.js';
+import { renderPorCobrar, bindPorCobrarEvents, cleanupPorCobrar } from './pages/por_cobrar.js';
 import { obtenerUsuario } from './services/usuarios.service.js';
 import { escucharSesionActiva } from './services/caja.service.js';
 
@@ -132,6 +133,9 @@ function getRoute() {
   if (path.startsWith('/caja')) {
     return { page: 'caja', docId: null };
   }
+  if (path.startsWith('/por-cobrar')) {
+    return { page: 'por-cobrar', docId: null };
+  }
   return { page: 'pedidos', docId: null };
 }
 
@@ -153,6 +157,8 @@ function renderPage(user, profile) {
     authorized = permissions.includes('gestionar_usuarios');
   } else if (page === 'caja') {
     authorized = permissions.includes('gestionar_caja');
+  } else if (page === 'por-cobrar') {
+    authorized = permissions.includes('ver_por_cobrar');
   }
 
   // Redireccionar si no está autorizado
@@ -199,6 +205,8 @@ function renderPage(user, profile) {
     content = renderHistorial();
   } else if (page === 'caja') {
     content = renderCaja();
+  } else if (page === 'por-cobrar') {
+    content = renderPorCobrar();
   } else {
     content = renderPedidos();
   }
@@ -221,6 +229,9 @@ function renderPage(user, profile) {
   } else if (page === 'caja') {
     bindCajaEvents();
     currentCleanup = cleanupCaja;
+  } else if (page === 'por-cobrar') {
+    bindPorCobrarEvents();
+    currentCleanup = cleanupPorCobrar;
   } else {
     bindPedidosEvents();
     currentCleanup = cleanupPedidos;

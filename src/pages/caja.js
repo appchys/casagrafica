@@ -872,6 +872,10 @@ function renderAperturaCierreData() {
         return;
       }
 
+      if (!confirm(`¿Estás seguro de que deseas ABRIR la caja con un monto inicial de ${formatCurrency(monto)}?`)) {
+        return;
+      }
+
       if (btn) {
         btn.disabled = true;
         btn.innerHTML = '<div class="spinner"></div> Abriendo...';
@@ -1127,6 +1131,10 @@ function renderAperturaCierreData() {
 
       if (isNaN(real) || real < 0) {
         showToast('Ingresa un monto real de efectivo válido.', 'error');
+        return;
+      }
+
+      if (!confirm(`¿Estás seguro de que deseas CERRAR la caja con un monto real de ${formatCurrency(real)}?`)) {
         return;
       }
 
