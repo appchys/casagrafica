@@ -1,9 +1,9 @@
 import { renderPedidoCard } from '../components/pedidoCard.js';
 import { showAbonoModal } from '../components/abonoForm.js';
 import {
-  buscarPedidos, obtenerPedido,
+  buscarPedidos, obtenerPedido, obtenerPedidosActivosCliente,
   actualizarEstadoProduccion, escucharPedido, escucharPedidosRecientes,
-  agregarAbono
+  agregarAbono, agruparPedidos
 } from '../services/pedidos.service.js';
 import { formatCurrency, formatDate } from '../utils/formatters.js';
 import { imprimirRecibo } from '../services/print.service.js';
@@ -65,7 +65,12 @@ export function bindTallerEvents(initialDocId) {
 
   // If arriving from a card click, load that pedido directly
   if (initialDocId) {
-    openDetail(initialDocId);
+    if (initialDocId.startsWith('grupo/')) {
+      const grupoId = initialDocId.replace('grupo/', '');
+      openGroupDetail(grupoId);
+    } else {
+      openDetail(initialDocId);
+    }
   } else {
     loadRecent();
   }
@@ -122,10 +127,12 @@ function showList(pedidos, searchTerm = '') {
     return;
   }
 
+  const grouped = agruparPedidos(pedidos);
+
   // Group by status
-  const pendientes = pedidos.filter(p => p.estado_produccion === 'PENDIENTE');
-  const listo      = pedidos.filter(p => p.estado_produccion === 'LISTO' || p.estado_produccion === 'EN PROCESO');
-  const entregados = pedidos.filter(p => p.estado_produccion === 'ENTREGADO');
+  const pendientes = grouped.filter(p => p.estado_produccion === 'PENDIENTE');
+  const listo      = grouped.filter(p => p.estado_produccion === 'LISTO' || p.estado_produccion === 'EN PROCESO');
+  const entregados = grouped.filter(p => p.estado_produccion === 'ENTREGADO');
 
   content.innerHTML = `
     <div class="taller-columns">
@@ -197,7 +204,8 @@ function showList(pedidos, searchTerm = '') {
       const printBtn = e.target.closest('[data-card-print]');
       if (printBtn) {
         const docId = printBtn.dataset.cardPrint;
-        const ped = pedidos.find(p => p._docId === docId);
+        const groupedList = agruparPedidos(pedidos);
+        const ped = groupedList.find(p => p._docId === docId || (p.isGrupo && p.pedidos.some(sub => sub._docId === docId)));
         if (ped) {
           imprimirRecibo(ped);
         }
@@ -227,7 +235,13 @@ function showList(pedidos, searchTerm = '') {
         return;
       }
 
-      history.pushState(null, '', `/taller/${card.dataset.docId}`);
+      // Si la tarjeta tiene sub-bloques, es un grupo: siempre abrir vista consolidada
+      const hasSubBlocks = card.querySelector('.sub-pedido-block');
+      if (hasSubBlocks) {
+        history.pushState(null, '', `/taller/grupo/${card.dataset.docId}`);
+      } else {
+        history.pushState(null, '', `/taller/${card.dataset.docId}`);
+      }
       window.dispatchEvent(new PopStateEvent('popstate'));
     });
   });
@@ -585,6 +599,250 @@ function renderDetail(pedido) {
     } catch (err) { showToast('Error: ' + err.message, 'error'); }
   });
 }
+// ── Group Detail ──
+
+async function openGroupDetail(grupoId) {
+  if (!grupoId) return;
+  const content = document.getElementById('taller-content');
+  if (!content) return;
+
+  content.innerHTML = `<div class="loading-center"><div class="spinner spinner-lg"></div><span>Cargando pedidos...</span></div>`;
+  if (unsubscribe) { unsubscribe(); unsubscribe = null; }
+
+  try {
+    // Obtener todos los pedidos del grupo: el pedido con _docId = grupoId y todos los que tienen grupo_id = grupoId
+    const pedido0 = await obtenerPedido(grupoId);
+    if (!pedido0) { showToast('Pedido no encontrado', 'error'); loadRecent(); return; }
+
+    const clienteId = pedido0.cliente_id;
+    const todos = await obtenerPedidosActivosCliente(clienteId);
+    const subPedidos = todos.filter(p => p._docId === grupoId || p.grupo_id === grupoId);
+    // Asegurar que el pedido principal esté incluido aunque esté entregado
+    if (!subPedidos.find(p => p._docId === grupoId)) subPedidos.unshift(pedido0);
+
+    renderGroupDetail(subPedidos.sort((a, b) => {
+      const ta = a.fecha_creacion?.toMillis?.() || 0;
+      const tb = b.fecha_creacion?.toMillis?.() || 0;
+      return ta - tb;
+    }));
+  } catch (err) {
+    showToast('Error: ' + err.message, 'error');
+    loadRecent();
+  }
+}
+
+function renderGroupDetail(subPedidos) {
+  const content = document.getElementById('taller-content');
+  if (!content) return;
+
+  const clienteNombre = subPedidos[0]?.cliente_nombre || '—';
+  const clienteTelefono = subPedidos[0]?.cliente_telefono || '';
+
+  const totalPagar    = subPedidos.reduce((s, p) => s + (Number(p.total_pagar) || 0), 0);
+  const totalAbonado  = subPedidos.reduce((s, p) => s + (Number(p.total_abonado) || 0), 0);
+  const saldoPendiente = subPedidos.reduce((s, p) => s + (Number(p.saldo_pendiente) || 0), 0);
+
+  const badgeProd = (estado) => {
+    if (estado === 'PENDIENTE') return 'badge-pendiente';
+    if (estado === 'LISTO') return 'badge-listo';
+    if (estado === 'EN PROCESO') return 'badge-proceso';
+    if (estado === 'ENTREGADO') return 'badge-entregado';
+    return '';
+  };
+
+  const subPedidosHTML = subPedidos.map(sub => {
+    const productRows = sub.productos.map((p, i) => `
+      <tr>
+        <td style="font-weight:700; color:var(--text-tertiary);">${i + 1}</td>
+        <td>
+          <div style="font-weight:700; color:var(--accent);">${p.producto_tipo}</div>
+          ${p.detalle_personalizado ? `<div style="font-size:0.82rem; color:var(--text-secondary); margin-top:2px;">${p.detalle_personalizado}</div>` : ''}
+        </td>
+        <td style="text-align:center; font-family:var(--font-mono); font-weight:700;">${p.cantidad}</td>
+        <td style="text-align:right; font-family:var(--font-mono);">${formatCurrency(p.precio_unitario)}</td>
+        <td style="text-align:right; font-family:var(--font-mono); font-weight:800;">${formatCurrency(p.subtotal)}</td>
+      </tr>
+    `).join('');
+
+    const isPaidSub = sub.saldo_pendiente <= 0;
+    const isEntregadoSub = sub.estado_produccion === 'ENTREGADO';
+    const estados = ['PENDIENTE', 'LISTO', 'ENTREGADO'];
+
+    return `
+      <div class="card" style="border-left: 3px solid var(--accent);" data-sub-docid="${sub._docId}">
+        <!-- Sub-header -->
+        <div class="card-header" style="display:flex; justify-content:space-between; align-items:center;">
+          <div style="display:flex; align-items:center; gap:10px;">
+            <span style="font-family:var(--font-mono); font-size:1rem; font-weight:800; color:var(--accent);">${sub.id_pedido}</span>
+            <span class="badge ${badgeProd(sub.estado_produccion)}" style="font-size:0.72rem;">${sub.estado_produccion}</span>
+          </div>
+          <div style="display:flex; gap:6px; align-items:center;">
+            <span class="badge badge-${sub.estado_pago.toLowerCase().replace(' ', '-')}" style="font-size:0.72rem;">${sub.estado_pago}</span>
+            <button type="button" class="btn-print-card group-sub-print" data-sub-print="${sub._docId}" title="Imprimir esta orden" style="width:28px; height:28px; display:flex; align-items:center; justify-content:center; padding:0; background:transparent; border:1px solid var(--border); border-radius:4px; cursor:pointer; color:var(--text-secondary);">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Products -->
+        <div style="overflow-x:auto; padding:0 4px;">
+          <table class="detail-table">
+            <thead>
+              <tr>
+                <th>#</th><th>Producto / Detalle</th>
+                <th style="text-align:center;">Cant.</th>
+                <th style="text-align:right;">P.Unit.</th>
+                <th style="text-align:right;">Subtotal</th>
+              </tr>
+            </thead>
+            <tbody>${productRows}</tbody>
+          </table>
+        </div>
+
+        <!-- Totales individuales y estado de producción -->
+        <div class="card-padded" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; border-top:1px solid var(--border); margin-top:4px;">
+          <!-- Estado producción -->
+          <div class="estado-tabs" style="gap:6px;" data-sub-id="${sub._docId}">
+            ${estados.map(e => `
+              <button class="estado-tab ${sub.estado_produccion === e ? 'active' : ''}" data-estado="${e}" data-sub-id="${sub._docId}">${e}</button>
+            `).join('')}
+          </div>
+          <!-- Saldo -->
+          <div style="text-align:right; font-size:0.82rem;">
+            <div style="color:var(--text-tertiary);">Total: <strong>${formatCurrency(sub.total_pagar)}</strong></div>
+            ${!isPaidSub ? `
+              <div style="color:var(--danger-text); font-weight:700;">
+                Saldo: ${formatCurrency(sub.saldo_pendiente)}
+                <button type="button" class="btn btn-xs btn-danger-outline group-abono-btn" data-abono-id="${sub._docId}" style="margin-left:6px; font-size:0.72rem; padding:2px 6px;">Abonar</button>
+              </div>
+            ` : `<div style="color:var(--success-text); font-weight:700;">Pagado</div>`}
+          </div>
+        </div>
+
+        ${sub.notas ? `
+          <div class="card-padded" style="border-top:1px solid var(--border); font-size:0.82rem; color:var(--text-secondary);">
+            <span style="font-weight:700; color:var(--text-tertiary); text-transform:uppercase; font-size:0.72rem;">Notas:</span> ${sub.notas}
+          </div>
+        ` : ''}
+      </div>
+    `;
+  }).join('');
+
+  const grupoId = subPedidos[0]._docId;
+
+  content.innerHTML = `
+    <!-- Back -->
+    <button class="btn btn-ghost btn-sm" id="btn-back-taller" style="margin-bottom:16px;">
+      ← Volver
+    </button>
+
+    <div class="taller-detail-layout">
+      <!-- Left: sub-pedidos -->
+      <div style="display:flex; flex-direction:column; gap:14px;">
+
+        <!-- Header del cliente -->
+        <div class="card card-padded">
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+            <div>
+              <div style="font-size:1.2rem; font-weight:800;">${clienteNombre}</div>
+              ${clienteTelefono ? `<div style="color:var(--text-tertiary); font-size:0.85rem; margin-top:2px;">${clienteTelefono}</div>` : ''}
+              <div style="font-size:0.75rem; color:var(--text-tertiary); margin-top:4px;">${subPedidos.length} pedido(s) unificado(s)</div>
+            </div>
+            <button type="button" class="btn-print-card" id="btn-print-group" title="Imprimir ticket consolidado" style="display:flex; align-items:center; gap:6px; padding:6px 10px; background:transparent; border:1px solid var(--border); border-radius:6px; cursor:pointer; font-size:0.82rem; color:var(--text-secondary);">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+              Imprimir todo
+            </button>
+          </div>
+        </div>
+
+        ${subPedidosHTML}
+      </div>
+
+      <!-- Right: resumen financiero consolidado -->
+      <div style="display:flex; flex-direction:column; gap:14px;">
+        <div class="card card-padded">
+          <div style="font-size:0.75rem; font-weight:700; color:var(--text-tertiary); text-transform:uppercase; margin-bottom:12px;">Resumen consolidado</div>
+          <div class="totals-box" style="margin-top:0;">
+            <div class="totals-row">
+              <span>Total</span>
+              <span class="totals-val">${formatCurrency(totalPagar)}</span>
+            </div>
+            <div class="totals-row">
+              <span>Abonado</span>
+              <span class="totals-val" style="color:var(--success-text);">${formatCurrency(totalAbonado)}</span>
+            </div>
+            <div class="totals-row main">
+              <span>Saldo</span>
+              <span class="totals-val ${saldoPendiente > 0 ? 'totals-saldo-due' : 'totals-saldo-paid'}">${saldoPendiente > 0 ? formatCurrency(saldoPendiente) : 'Pagado'}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Volver
+  document.getElementById('btn-back-taller')?.addEventListener('click', () => {
+    if (window.history.length > 2) window.history.back();
+    else { history.pushState(null, '', '/taller'); window.dispatchEvent(new PopStateEvent('popstate')); }
+  });
+
+  // Imprimir todo el grupo
+  document.getElementById('btn-print-group')?.addEventListener('click', () => {
+    const grupoObj = {
+      isGrupo: true,
+      grupo_id: grupoId,
+      cliente_nombre: clienteNombre,
+      cliente_telefono: clienteTelefono,
+      pedidos: subPedidos,
+    };
+    imprimirRecibo(grupoObj);
+  });
+
+  // Imprimir pedido individual
+  content.querySelectorAll('.group-sub-print').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const docId = btn.dataset.subPrint;
+      const sub = subPedidos.find(p => p._docId === docId);
+      if (sub) imprimirRecibo(sub);
+    });
+  });
+
+  // Estado tabs por sub-pedido
+  content.querySelectorAll('.estado-tab').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const nuevoEstado = btn.dataset.estado;
+      const subId = btn.dataset.subId;
+      const sub = subPedidos.find(p => p._docId === subId);
+      if (!sub) return;
+
+      if (nuevoEstado === 'ENTREGADO') {
+        if (sub.saldo_pendiente > 0) {
+          if (!confirm(`El pedido #${sub.id_pedido} tiene un saldo de ${formatCurrency(sub.saldo_pendiente)}. ¿Marcar como ENTREGADO de todos modos?`)) return;
+        } else {
+          if (!confirm(`¿Confirmar entrega del pedido #${sub.id_pedido}?`)) return;
+        }
+      }
+      try {
+        await actualizarEstadoProduccion(subId, nuevoEstado, getCurrentUserProfile());
+        showToast(`Pedido #${sub.id_pedido}: ${nuevoEstado}`, 'success');
+        // Refrescar la vista
+        openGroupDetail(grupoId);
+      } catch (err) { showToast('Error: ' + err.message, 'error'); }
+    });
+  });
+
+  // Abonar por sub-pedido
+  content.querySelectorAll('.group-abono-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const sub = subPedidos.find(p => p._docId === btn.dataset.abonoId);
+      if (sub) showAbonoModal(sub);
+    });
+  });
+}
+
 async function handleCardAction(pedido, action) {
   if (action === 'comenzar') {
     try {

@@ -62,7 +62,7 @@ export function renderClienteSearch() {
  * Bind autocomplete and interface toggles for the client search widget
  */
 export function bindClienteSearch(callbacks = {}) {
-  const { onNewClient, onEditClient } = callbacks;
+  const { onNewClient, onEditClient, onSelectClient } = callbacks;
   let debounceTimer = null;
 
   const searchContainer = document.getElementById('cs-search-mode-container');
@@ -227,6 +227,10 @@ export function bindClienteSearch(callbacks = {}) {
     if (searchContainer) searchContainer.style.display = 'none';
     
     showSelectedCard(client.nombre, client.telefono);
+
+    if (typeof onSelectClient === 'function') {
+      onSelectClient(client);
+    }
   }
 
   function resetToSearch() {

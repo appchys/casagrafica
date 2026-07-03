@@ -122,6 +122,10 @@ function getRoute() {
   const path = window.location.pathname || '/pedidos';
   if (path.startsWith('/taller')) {
     const parts = path.split('/');
+    // Soporta /taller/grupo/{grupoId} para pedidos unificados
+    if (parts[2] === 'grupo' && parts[3]) {
+      return { page: 'taller', docId: 'grupo/' + parts[3] };
+    }
     return { page: 'taller', docId: parts[2] || null };
   }
   if (path.startsWith('/usuarios')) {

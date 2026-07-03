@@ -17,7 +17,7 @@ const COLECCION = 'pedidos';
 /**
  * Create a new order with products and optional first payment inside a transaction to ensure unique sequential IDs
  */
-export async function crearPedido({ cliente, productos, primerAbono, abonosIniciales, notas, usuario }) {
+export async function crearPedido({ cliente, productos, primerAbono, abonosIniciales, notas, usuario, grupo_id }) {
   const normalizedPhone = normalizarTelefono(cliente.telefono);
 
   // Save/Update client to get their Firestore docId
@@ -145,6 +145,7 @@ export async function crearPedido({ cliente, productos, primerAbono, abonosInici
       fecha_creacion: Timestamp.now(),
       notas: (notas || '').trim(),
       historial_estados: initialHistorial,
+      grupo_id: grupo_id || null,
     };
 
     transaction.set(counterRef, { current_id: nextNum });
@@ -510,3 +511,87 @@ export async function eliminarAdjuntoPedido(pedidoId, adjuntoObj) {
     }
   }
 }
+
+/**
+ * Update the group ID of an existing order to link it with others
+ */
+export async function actualizarGrupoPedido(docId, grupoId) {
+  const docRef = doc(db, COLECCION, docId);
+  await updateDoc(docRef, { grupo_id: grupoId });
+}
+
+/**
+ * Get active orders (not delivered yet) for a given client
+ */
+export async function obtenerPedidosActivosCliente(clienteId) {
+  if (!clienteId) return [];
+  const q = query(
+    collection(db, COLECCION),
+    where('cliente_id', '==', clienteId)
+  );
+  const snap = await getDocs(q);
+  const pedidos = snap.docs.map(d => ({ _docId: d.id, ...d.data() }));
+  return pedidos.filter(p => ['PENDIENTE', 'EN PROCESO', 'LISTO'].includes(p.estado_produccion));
+}
+
+/**
+ * Group a flat list of orders by their grupo_id
+ */
+export function agruparPedidos(pedidosList) {
+  const groups = {};
+  const individuales = [];
+
+  pedidosList.forEach(p => {
+    if (p.grupo_id) {
+      if (!groups[p.grupo_id]) {
+        groups[p.grupo_id] = [];
+      }
+      groups[p.grupo_id].push(p);
+    } else {
+      individuales.push(p);
+    }
+  });
+
+  const result = [...individuales];
+
+  Object.keys(groups).forEach(grupoId => {
+    const list = groups[grupoId];
+    if (list.length === 1) {
+      result.push(list[0]);
+    } else if (list.length > 1) {
+      // Sort by creation date ascending (oldest first)
+      list.sort((a, b) => {
+        const tA = a.fecha_creacion?.seconds || a.fecha_creacion?.toMillis?.() || 0;
+        const tB = b.fecha_creacion?.seconds || b.fecha_creacion?.toMillis?.() || 0;
+        return tA - tB;
+      });
+
+      const principal = list[0];
+      
+      const grupoObj = {
+        isGrupo: true,
+        grupo_id: grupoId,
+        _docId: principal._docId,
+        id_pedido: principal.id_pedido,
+        cliente_nombre: principal.cliente_nombre,
+        cliente_telefono: principal.cliente_telefono,
+        cliente_id: principal.cliente_id,
+        estado_produccion: list.some(p => p.estado_produccion === 'PENDIENTE') ? 'PENDIENTE' :
+                           list.some(p => p.estado_produccion === 'EN PROCESO' || p.estado_produccion === 'LISTO') ? 'LISTO' : 'ENTREGADO',
+        pedidos: list,
+        fecha_creacion: principal.fecha_creacion
+      };
+      result.push(grupoObj);
+    }
+  });
+
+  // Sort overall results by creation date descending
+  result.sort((a, b) => {
+    const tA = a.fecha_creacion?.seconds || a.fecha_creacion?.toMillis?.() || 0;
+    const tB = b.fecha_creacion?.seconds || b.fecha_creacion?.toMillis?.() || 0;
+    return tB - tA;
+  });
+
+  return result;
+}
+

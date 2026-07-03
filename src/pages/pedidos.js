@@ -2,7 +2,7 @@ import { renderProductForm, renderProductListRow, createEmptyProduct } from '../
 import { renderAbonoFormModal, showAbonoModal } from '../components/abonoForm.js';
 import { calcularSubtotal, calcularTotalPagar } from '../utils/calculations.js';
 import { formatCurrency, formatDate } from '../utils/formatters.js';
-import { crearPedido, actualizarPedido, obtenerPedido, obtenerPedidosRecientes, obtenerTiposProducto, eliminarPedido, escucharPedidosRecientes } from '../services/pedidos.service.js';
+import { crearPedido, actualizarPedido, obtenerPedido, obtenerPedidosRecientes, obtenerTiposProducto, eliminarPedido, escucharPedidosRecientes, agruparPedidos, obtenerPedidosActivosCliente, actualizarGrupoPedido } from '../services/pedidos.service.js';
 import { guardarProducto, obtenerProductosGuardados, eliminarProductoGuardado } from '../services/productosGuardados.service.js';
 import { guardarCliente, obtenerCliente } from '../services/clientes.service.js';
 import { imprimirRecibo, imprimirReciboDirecto } from '../services/print.service.js';
@@ -29,6 +29,10 @@ let editingClientDocId = '';
 let tempEditClientExtra = {};
 let editingPedidoId = '';
 let deletePedidoId = '';
+let isUnificarModalOpen = false;
+let pedidosActivosCliente = [];
+let decisionUnificacionTomada = false;
+let unificarAbiertoAlGuardar = false;
 let documentClickHandler = null;
 let unsubscribePedidos = null;
 let colapsados = { PENDIENTE: false, EN_PROCESO: false, ENTREGADO: true };
@@ -338,30 +342,34 @@ function renderFilteredList() {
     return;
   }
 
+  const grouped = agruparPedidos(filtered);
+
   // Group by status
-  const pendientes = filtered.filter(p => p.estado_produccion === 'PENDIENTE');
-  const listo      = filtered.filter(p => p.estado_produccion === 'LISTO' || p.estado_produccion === 'EN PROCESO');
+  const pendientes = grouped.filter(p => p.estado_produccion === 'PENDIENTE');
+  const listo      = grouped.filter(p => p.estado_produccion === 'LISTO' || p.estado_produccion === 'EN PROCESO');
 
   // Only show orders delivered today in the Entregadas column
   const startOfToday = new Date();
   startOfToday.setHours(0, 0, 0, 0);
 
-  const entregados = filtered.filter(p => {
+  const entregados = grouped.filter(p => {
     if (p.estado_produccion !== 'ENTREGADO') return false;
 
+    const target = p.isGrupo ? p.pedidos[0] : p;
+
     let deliveryDate = null;
-    if (p.fecha_entrega) {
-      deliveryDate = p.fecha_entrega.toDate ? p.fecha_entrega.toDate() : new Date(p.fecha_entrega);
-    } else if (Array.isArray(p.historial_estados)) {
-      const deliveryEvent = p.historial_estados.find(h => h.tipo === 'produccion' && h.estado_nuevo === 'ENTREGADO');
+    if (target.fecha_entrega) {
+      deliveryDate = target.fecha_entrega.toDate ? target.fecha_entrega.toDate() : new Date(target.fecha_entrega);
+    } else if (Array.isArray(target.historial_estados)) {
+      const deliveryEvent = target.historial_estados.find(h => h.tipo === 'produccion' && h.estado_nuevo === 'ENTREGADO');
       if (deliveryEvent && deliveryEvent.fecha) {
         deliveryDate = deliveryEvent.fecha.toDate ? deliveryEvent.fecha.toDate() : new Date(deliveryEvent.fecha);
       }
     }
 
     if (!deliveryDate) {
-      if (p.fecha_creacion) {
-        const createdDate = p.fecha_creacion.toDate ? p.fecha_creacion.toDate() : new Date(p.fecha_creacion);
+      if (target.fecha_creacion) {
+        const createdDate = target.fecha_creacion.toDate ? target.fecha_creacion.toDate() : new Date(target.fecha_creacion);
         if (createdDate >= startOfToday) return true;
       }
       return false;
@@ -438,9 +446,15 @@ function renderFilteredList() {
   // Bind click to each card → navigate to taller with this pedido
   list.querySelectorAll('.pedido-card').forEach(card => {
     card.addEventListener('click', (e) => {
-      if (e.target.closest('.product-dropdown') || e.target.closest('[data-card-print]') || e.target.closest('.pedido-card-amount-action')) return;
-      const docId = card.dataset.docId;
-      history.pushState(null, '', `/taller/${docId}`);
+      if (e.target.closest('.product-dropdown') || e.target.closest('[data-card-print]') || e.target.closest('.pedido-card-amount-action') || e.target.closest('.btn-attach-card')) return;
+
+      // Si la tarjeta tiene sub-bloques, es un grupo: siempre abrir vista consolidada
+      const hasSubBlocks = card.querySelector('.sub-pedido-block');
+      if (hasSubBlocks) {
+        history.pushState(null, '', `/taller/grupo/${card.dataset.docId}`);
+      } else {
+        history.pushState(null, '', `/taller/${card.dataset.docId}`);
+      }
       window.dispatchEvent(new PopStateEvent('popstate'));
     });
   });
@@ -598,6 +612,10 @@ function resetSidebar() {
   tempEditClientExtra = {};
   editingPedidoId = '';
   deletePedidoId = '';
+  isUnificarModalOpen = false;
+  pedidosActivosCliente = [];
+  decisionUnificacionTomada = false;
+  unificarAbiertoAlGuardar = false;
   
   updateSidebarUI();
   updateTotals();
@@ -776,6 +794,14 @@ function updateSidebarUI() {
       saveBtn.disabled = true;
       saveBtn.textContent = 'Completa el abono...';
     }
+  } else if (isUnificarModalOpen) {
+    if (modalContainer) {
+      modalContainer.innerHTML = renderUnificarModal(pedidosActivosCliente);
+    }
+    if (saveBtn) {
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Unificando pedido...';
+    }
   } else if (isNewClientModalOpen) {
     if (modalContainer) {
       modalContainer.innerHTML = renderNewClientForm(tempNewClientName, tempEditClientExtra);
@@ -852,6 +878,23 @@ export function bindPedidosEvents() {
       isNewClientModalOpen = true;
       updateSidebarUI();
     },
+    onSelectClient: async (client) => {
+      try {
+        const activos = await obtenerPedidosActivosCliente(client._docId);
+        if (activos.length > 0) {
+          pedidosActivosCliente = activos;
+          isUnificarModalOpen = true;
+          unificarAbiertoAlGuardar = false;
+          decisionUnificacionTomada = false;
+          updateSidebarUI();
+        } else {
+          pedidosActivosCliente = [];
+          decisionUnificacionTomada = true;
+        }
+      } catch (err) {
+        console.error("Error comprobando pedidos activos al seleccionar cliente:", err);
+      }
+    }
   });
 
   // FAB
@@ -978,6 +1021,35 @@ export function bindPedidosEvents() {
           if (panelSaved) panelSaved.style.display = 'block';
           if (btnConfirm) btnConfirm.style.display = 'none';
         }
+        return;
+      }
+
+      // --- UNIFICAR PEDIDO MODAL ---
+      if (e.target.closest('#btn-confirm-unificar')) {
+        isUnificarModalOpen = false;
+        decisionUnificacionTomada = true;
+        updateSidebarUI();
+        if (unificarAbiertoAlGuardar) {
+          await handleSave(true);
+        }
+        return;
+      }
+
+      if (e.target.closest('#btn-no-unificar')) {
+        isUnificarModalOpen = false;
+        decisionUnificacionTomada = true;
+        pedidosActivosCliente = []; // Vaciamos para guardar separado
+        updateSidebarUI();
+        if (unificarAbiertoAlGuardar) {
+          await handleSave(true);
+        }
+        return;
+      }
+
+      if (e.target.id === 'unificar-pedido-modal') {
+        isUnificarModalOpen = false;
+        pedidosActivosCliente = [];
+        updateSidebarUI();
         return;
       }
 
@@ -1276,6 +1348,12 @@ export function bindPedidosEvents() {
 
   // Card dropdown menus + close dropdowns — single document handler
   documentClickHandler = (e) => {
+    // Resetear unificación al quitar el cliente
+    if (e.target.closest('#cs-chip-remove')) {
+      decisionUnificacionTomada = false;
+      pedidosActivosCliente = [];
+    }
+
     // Toggle card dropdown
     const toggleBtn = e.target.closest('[data-card-dropdown-toggle]');
     if (toggleBtn) {
@@ -1317,7 +1395,8 @@ export function bindPedidosEvents() {
     const printBtn = e.target.closest('[data-card-print]');
     if (printBtn) {
       const docId = printBtn.dataset.cardPrint;
-      const ped = allPedidos.find(p => p._docId === docId);
+      const groupedList = agruparPedidos(allPedidos);
+      const ped = groupedList.find(p => p._docId === docId || (p.isGrupo && p.pedidos.some(sub => sub._docId === docId)));
       if (ped) {
         imprimirRecibo(ped);
       } else {
@@ -1529,7 +1608,7 @@ function updateTotals() {
   updateSidebarUI();
 }
 
-async function handleSave() {
+async function handleSave(confirmacionOmitida = false) {
   if (saving) return;
 
   // Read selected client autocomplete state
@@ -1548,6 +1627,28 @@ async function handleSave() {
     return;
   }
 
+  // Si no es edición y no se ha tomado la decisión
+  if (!editingPedidoId && !decisionUnificacionTomada) {
+    try {
+      const btn = document.getElementById('btn-save-print');
+      if (btn) { btn.disabled = true; btn.innerHTML = '<div class="spinner"></div> Verificando...'; }
+      
+      const activos = await obtenerPedidosActivosCliente(clienteState.docId);
+      
+      if (btn) { btn.disabled = false; btn.innerHTML = 'Guardar e Imprimir'; }
+
+      if (activos.length > 0) {
+        pedidosActivosCliente = activos;
+        isUnificarModalOpen = true;
+        unificarAbiertoAlGuardar = true;
+        updateSidebarUI();
+        return;
+      }
+    } catch (err) {
+      console.error("Error comprobando pedidos activos:", err);
+    }
+  }
+
   const abonosFinales = nuevoPedidoAbonos.map(ab => ({ ...ab, monto: Number(ab.monto) }));
 
   saving = true;
@@ -1563,6 +1664,12 @@ async function handleSave() {
       closeSidebar();
       showToast('Pedido actualizado', 'success');
     } else {
+      let grupo_id = null;
+      if (pedidosActivosCliente.length > 0) {
+        const targetActivo = pedidosActivosCliente[0];
+        grupo_id = targetActivo.grupo_id || targetActivo._docId || targetActivo.id;
+      }
+
       savedPedido = await crearPedido({
         cliente: {
           docId: clienteState.docId,
@@ -1574,10 +1681,44 @@ async function handleSave() {
         abonosIniciales: abonosFinales,
         notas,
         usuario: getCurrentUserProfile(),
+        grupo_id
       });
+
+      // Si el pedido activo original al que nos unificamos no tenía un grupo_id asignado, lo actualizamos.
+      if (grupo_id && pedidosActivosCliente.length > 0) {
+        const targetActivo = pedidosActivosCliente[0];
+        if (!targetActivo.grupo_id) {
+          await actualizarGrupoPedido(targetActivo._docId, grupo_id);
+        }
+      }
+
       closeSidebar();
       showToast('Pedido creado', 'success');
-      imprimirReciboDirecto(savedPedido);
+      if (savedPedido.grupo_id) {
+        try {
+          const activosDelGrupo = await obtenerPedidosActivosCliente(clienteState.docId);
+          const grupoPedidos = activosDelGrupo.filter(p => p.grupo_id === savedPedido.grupo_id || p._docId === savedPedido.grupo_id);
+          
+          if (grupoPedidos.length > 0) {
+            const principal = grupoPedidos.find(p => p._docId === savedPedido.grupo_id) || grupoPedidos[0];
+            const grupoObj = {
+              isGrupo: true,
+              grupo_id: savedPedido.grupo_id,
+              cliente_nombre: savedPedido.cliente_nombre,
+              cliente_telefono: savedPedido.cliente_telefono,
+              pedidos: grupoPedidos,
+              fecha_creacion: principal.fecha_creacion
+            };
+            imprimirReciboDirecto(grupoObj);
+          } else {
+            imprimirReciboDirecto(savedPedido);
+          }
+        } catch {
+          imprimirReciboDirecto(savedPedido);
+        }
+      } else {
+        imprimirReciboDirecto(savedPedido);
+      }
     }
 
     // Reset sidebar after a delay
@@ -1592,6 +1733,8 @@ async function handleSave() {
   } finally {
     saving = false;
     if (btn) { btn.disabled = false; btn.innerHTML = 'Guardar e Imprimir'; }
+    isUnificarModalOpen = false;
+    pedidosActivosCliente = [];
   }
 }
 
@@ -1623,4 +1766,24 @@ function updateModalSubtotal(sub) {
       displayEl.style.display = 'none';
     }
   }
+}
+
+function renderUnificarModal(pedidosActivos) {
+  const listaPedidos = pedidosActivos.map(p => `#${p.id_pedido}`).join(', ');
+  return `
+    <div class="modal-overlay" id="unificar-pedido-modal" style="display: flex;">
+      <div class="modal-card" style="margin: auto; max-width: 400px; width: 100%;">
+        <div class="modal-title" style="font-size: 1.15rem; font-weight: 800; color: var(--text-primary);">Unificar Pedido</div>
+        
+        <div style="margin: 16px 0; font-size: 0.9rem; color: var(--text-secondary); line-height: 1.4;">
+          El cliente tiene pedidos activos (${listaPedidos}). ¿Deseas unificar esta nueva orden dentro de la misma tarjeta?
+        </div>
+
+        <div class="modal-actions" style="margin-top: 20px; display: flex; gap: 10px;">
+          <button type="button" class="btn btn-secondary" id="btn-no-unificar" style="flex: 1;">Crear separado</button>
+          <button type="button" class="btn btn-primary" id="btn-confirm-unificar" style="flex: 1;">Unificar</button>
+        </div>
+      </div>
+    </div>
+  `;
 }
