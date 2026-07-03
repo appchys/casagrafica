@@ -62,6 +62,14 @@ export function renderNavbar(currentPage, userEmail, permissions = [], userName 
             <span class="nav-label">Historial</span>
           </a>
         </li>
+        <li>
+          <a href="/anticipos" class="drawer-nav-item ${currentPage === 'anticipos' ? 'active' : ''}">
+            <span class="nav-icon" style="display:inline-flex; align-items:center;">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12V8H6a2 2 0 0 1-2-2c0-1.1.9-2 2-2h12v4"></path><path d="M4 6v12a2 2 0 0 0 2 2h14v-4"></path><path d="M18 12a2 2 0 0 0-2 2v2a2 2 0 0 0 2 2h4v-6Z"></path></svg>
+            </span>
+            <span class="nav-label">Anticipos</span>
+          </a>
+        </li>
         ` : ''}
         ${showPorCobrar ? `
         <li>

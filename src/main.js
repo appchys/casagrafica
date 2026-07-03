@@ -10,6 +10,7 @@ import { renderUsuarios, bindUsuariosEvents, cleanupUsuarios } from './pages/usu
 import { renderHistorial, bindHistorialEvents, cleanupHistorial } from './pages/historial.js';
 import { renderCaja, bindCajaEvents, cleanupCaja } from './pages/caja.js';
 import { renderPorCobrar, bindPorCobrarEvents, cleanupPorCobrar } from './pages/por_cobrar.js';
+import { renderAnticipos, bindAnticiposEvents, cleanupAnticipos } from './pages/anticipos.js';
 import { obtenerUsuario } from './services/usuarios.service.js';
 import { escucharSesionActiva } from './services/caja.service.js';
 
@@ -140,6 +141,9 @@ function getRoute() {
   if (path.startsWith('/por-cobrar')) {
     return { page: 'por-cobrar', docId: null };
   }
+  if (path.startsWith('/anticipos')) {
+    return { page: 'anticipos', docId: null };
+  }
   return { page: 'pedidos', docId: null };
 }
 
@@ -163,6 +167,8 @@ function renderPage(user, profile) {
     authorized = permissions.includes('gestionar_caja');
   } else if (page === 'por-cobrar') {
     authorized = permissions.includes('ver_por_cobrar');
+  } else if (page === 'anticipos') {
+    authorized = permissions.includes('crear_pedidos') || permissions.includes('editar_pedidos');
   }
 
   // Redireccionar si no está autorizado
@@ -211,6 +217,8 @@ function renderPage(user, profile) {
     content = renderCaja();
   } else if (page === 'por-cobrar') {
     content = renderPorCobrar();
+  } else if (page === 'anticipos') {
+    content = renderAnticipos();
   } else {
     content = renderPedidos();
   }
@@ -236,6 +244,9 @@ function renderPage(user, profile) {
   } else if (page === 'por-cobrar') {
     bindPorCobrarEvents();
     currentCleanup = cleanupPorCobrar;
+  } else if (page === 'anticipos') {
+    bindAnticiposEvents();
+    currentCleanup = cleanupAnticipos;
   } else {
     bindPedidosEvents();
     currentCleanup = cleanupPedidos;

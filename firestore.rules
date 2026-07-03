@@ -168,6 +168,41 @@ service cloud.firestore {
              data.current_id >= 0;
     }
 
+    function isValidAnticipo(data) {
+      return data.keys().hasAll([
+               'cliente_id', 'cliente_nombre', 'cliente_telefono',
+               'monto', 'saldo', 'estado', 'fecha_creacion', 'metodo_pago'
+             ]) &&
+             data.keys().hasOnly([
+               'cliente_id', 'cliente_nombre', 'cliente_telefono',
+               'monto', 'saldo', 'estado', 'fecha_creacion', 'metodo_pago',
+               'usuario', 'usuario_anulacion', 'fecha_anulacion'
+             ]) &&
+             isValidString(data.cliente_id, 128) &&
+             isValidString(data.cliente_nombre, 128) &&
+             isValidString(data.cliente_telefono, 32) &&
+             data.monto is number && data.monto > 0 &&
+             data.saldo is number && data.saldo >= 0 &&
+             data.estado in ['activo', 'usado', 'anulado'] &&
+             data.fecha_creacion is timestamp &&
+             isValidString(data.metodo_pago, 32) &&
+             (!('usuario' in data) || data.usuario == null || (
+               data.usuario.keys().hasAll(['uid', 'nombre', 'email']) &&
+               data.usuario.keys().hasOnly(['uid', 'nombre', 'email']) &&
+               isValidString(data.usuario.uid, 128) &&
+               isValidString(data.usuario.nombre, 128) &&
+               isValidString(data.usuario.email, 128)
+             )) &&
+             (!('usuario_anulacion' in data) || data.usuario_anulacion == null || (
+               data.usuario_anulacion.keys().hasAll(['uid', 'nombre', 'email']) &&
+               data.usuario_anulacion.keys().hasOnly(['uid', 'nombre', 'email']) &&
+               isValidString(data.usuario_anulacion.uid, 128) &&
+               isValidString(data.usuario_anulacion.nombre, 128) &&
+               isValidString(data.usuario_anulacion.email, 128)
+             )) &&
+             (!('fecha_anulacion' in data) || data.fecha_anulacion is timestamp);
+    }
+
     function isValidEgreso(data) {
       return data.keys().hasAll(['descripcion', 'monto', 'metodo_pago', 'fecha']) &&
              data.keys().hasOnly(['descripcion', 'monto', 'metodo_pago', 'fecha', 'usuario']) &&
@@ -303,6 +338,18 @@ service cloud.firestore {
         isAdmin() || hasPermission('gestionar_caja')
       );
       allow update: if isAuthenticated() && isValidEgreso(request.resource.data) && (
+        isAdmin() || hasPermission('gestionar_caja')
+      );
+      allow delete: if isAdmin();
+    }
+
+    // Colección de anticipos
+    match /anticipos/{anticipoId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidAnticipo(request.resource.data) && (
+        isAdmin() || hasPermission('gestionar_caja') || hasPermission('crear_pedidos')
+      );
+      allow update: if isAuthenticated() && isValidAnticipo(request.resource.data) && (
         isAdmin() || hasPermission('gestionar_caja')
       );
       allow delete: if isAdmin();

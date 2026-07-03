@@ -2,20 +2,18 @@ import { escucharPedidosRecientes } from '../services/pedidos.service.js';
 import { escucharEgresos, registrarEgreso } from '../services/egresos.service.js';
 import { formatCurrency } from '../utils/formatters.js';
 import { showToast, getCurrentUserProfile } from '../main.js';
-import {
-  escucharSesionActiva,
-  escucharHistorialSesiones,
-  abrirSesionCaja,
-  cerrarSesionCaja
-} from '../services/caja.service.js';
+import { escucharSesionActiva, escucharHistorialSesiones, abrirSesionCaja, cerrarSesionCaja } from '../services/caja.service.js';
+import { escucharAnticipos } from '../services/anticipos.service.js';
 
 let unsubscribePedidos = null;
 let unsubscribeEgresos = null;
+let unsubscribeAnticipos = null;
 let unsubscribeSesionActiva = null;
 let unsubscribeHistorialSesiones = null;
 
 let allPedidos = [];
 let allEgresos = [];
+let allAnticipos = [];
 let sesionActiva = null;
 let historialSesiones = [];
 
@@ -545,6 +543,13 @@ export function bindCajaEvents() {
     renderCajaData();
     renderAperturaCierreData();
   });
+
+  // Escuchar cambios en los anticipos (tiempo real)
+  unsubscribeAnticipos = escucharAnticipos((anticipos) => {
+    allAnticipos = anticipos;
+    renderCajaData();
+    renderAperturaCierreData();
+  });
 }
 
 export function cleanupCaja() {
@@ -556,6 +561,10 @@ export function cleanupCaja() {
     unsubscribeEgresos();
     unsubscribeEgresos = null;
   }
+  if (unsubscribeAnticipos) {
+    unsubscribeAnticipos();
+    unsubscribeAnticipos = null;
+  }
   if (unsubscribeSesionActiva) {
     unsubscribeSesionActiva();
     unsubscribeSesionActiva = null;
@@ -566,6 +575,7 @@ export function cleanupCaja() {
   }
   allPedidos = [];
   allEgresos = [];
+  allAnticipos = [];
   sesionActiva = null;
   historialSesiones = [];
   activeTab = 'hoy';
@@ -587,6 +597,7 @@ function renderCajaData() {
   allPedidos.forEach(pedido => {
     const abonos = pedido.abonos || [];
     abonos.forEach(abono => {
+      if (abono.metodo_pago === 'Anticipo') return; // Omitir para evitar duplicidad
       movimientosList.push({
         id_movimiento: abono.id_abono,
         tipo_movimiento: 'ingreso',
@@ -599,6 +610,23 @@ function renderCajaData() {
         usuario: abono.usuario,
         pedido_historial: pedido.historial_estados || []
       });
+    });
+  });
+
+  // Ingresos (Anticipos)
+  allAnticipos.forEach(anticipo => {
+    if (anticipo.estado === 'anulado') return;
+    movimientosList.push({
+      id_movimiento: anticipo._docId,
+      tipo_movimiento: 'ingreso',
+      fecha_pago: anticipo.fecha_creacion,
+      monto: Number(anticipo.monto) || 0,
+      metodo_pago: anticipo.metodo_pago || 'Efectivo',
+      cliente_nombre: `[Anticipo] ${anticipo.cliente_nombre}`,
+      id_pedido: '-',
+      pedidoDocId: null,
+      usuario: anticipo.usuario,
+      pedido_historial: []
     });
   });
 
@@ -917,6 +945,7 @@ function renderAperturaCierreData() {
     allPedidos.forEach(pedido => {
       const abonos = pedido.abonos || [];
       abonos.forEach(abono => {
+        if (abono.metodo_pago === 'Anticipo') return; // Omitir abonos tipo anticipo
         const dateObj = abono.fecha_pago?.toDate ? abono.fecha_pago.toDate() : new Date(abono.fecha_pago || 0);
         if (dateObj >= fechaApertura) {
           const monto = Number(abono.monto) || 0;
@@ -937,6 +966,29 @@ function renderAperturaCierreData() {
           });
         }
       });
+    });
+
+    allAnticipos.forEach(anticipo => {
+      if (anticipo.estado === 'anulado') return;
+      const dateObj = anticipo.fecha_creacion?.toDate ? anticipo.fecha_creacion.toDate() : new Date(anticipo.fecha_creacion?.seconds * 1000 || 0);
+      if (dateObj >= fechaApertura) {
+        const monto = Number(anticipo.monto) || 0;
+        const met = (anticipo.metodo_pago || 'Efectivo').toLowerCase();
+
+        if (met === 'efectivo') ingresosEfectivo += monto;
+        else if (met === 'transferencia') ingresosTransferencia += monto;
+        else if (met === 'tarjeta') ingresosTarjeta += monto;
+
+        movimientosSesion.push({
+          id: anticipo._docId,
+          tipo: 'ingreso',
+          concepto: `Anticipo: ${anticipo.cliente_nombre}`,
+          metodo_pago: anticipo.metodo_pago || 'Efectivo',
+          monto,
+          fecha: dateObj,
+          usuario: anticipo.usuario?.nombre || 'Sistema'
+        });
+      }
     });
 
     allEgresos.forEach(egreso => {

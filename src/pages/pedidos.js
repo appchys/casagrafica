@@ -5,6 +5,7 @@ import { formatCurrency, formatDate } from '../utils/formatters.js';
 import { crearPedido, actualizarPedido, obtenerPedido, obtenerPedidosRecientes, obtenerTiposProducto, eliminarPedido, escucharPedidosRecientes, agruparPedidos, obtenerPedidosActivosCliente, actualizarGrupoPedido } from '../services/pedidos.service.js';
 import { guardarProducto, obtenerProductosGuardados, eliminarProductoGuardado } from '../services/productosGuardados.service.js';
 import { guardarCliente, obtenerCliente } from '../services/clientes.service.js';
+import { obtenerAnticiposActivosCliente } from '../services/anticipos.service.js';
 import { imprimirRecibo, imprimirReciboDirecto } from '../services/print.service.js';
 import { showToast, getCurrentUserProfile } from '../main.js';
 import { renderPedidoCard } from '../components/pedidoCard.js';
@@ -22,6 +23,8 @@ let tempProduct = null;
 let existingTipos = [];
 let savedProducts = [];
 let nuevoPedidoAbonos = [];
+let anticiposDisponibles = [];
+let anticiposAplicados = [];
 let isAbonoModalOpen = false;
 let isNewClientModalOpen = false;
 let tempNewClientName = '';
@@ -106,6 +109,7 @@ export function renderPedidos() {
             Cliente
           </div>
           ${renderClienteSearch()}
+          <div id="anticipo-cliente-container" style="margin-top: 8px;"></div>
         </div>
 
         <div style="height: 1px; background: var(--border); margin-bottom: 16px;"></div>
@@ -597,6 +601,100 @@ function closeSidebar() {
   deletePedidoId = '';
 }
 
+function actualizarAlertaAnticipo() {
+  const container = document.getElementById('anticipo-cliente-container');
+  if (!container) return;
+
+  if (anticiposDisponibles.length === 0) {
+    container.innerHTML = '';
+    return;
+  }
+
+  const totalAnticipos = anticiposDisponibles.reduce((sum, a) => sum + a.saldo, 0);
+  const yaAplicado = nuevoPedidoAbonos.some(ab => ab.metodo_pago === 'Anticipo');
+
+  if (yaAplicado) {
+    container.innerHTML = `
+      <div class="cs-selected-client-row" style="background: rgba(76, 175, 80, 0.08); border: 1px solid var(--success); padding: 8px 12px; border-radius: var(--radius-sm); font-size: 0.85rem; display: flex; justify-content: space-between; align-items: center; width: 100%;">
+        <span style="color: var(--success-text); font-weight: 600;">Anticipo aplicado</span>
+        <button type="button" class="btn btn-xs btn-outline" id="btn-remover-anticipo-alerta" style="border-color: var(--success); color: var(--success-text); padding: 2px 6px;">Quitar</button>
+      </div>
+    `;
+    document.getElementById('btn-remover-anticipo-alerta')?.addEventListener('click', quitarAnticipoDelPedido);
+  } else {
+    container.innerHTML = `
+      <div class="cs-selected-client-row" style="background: rgba(229, 57, 53, 0.08); border: 1px solid var(--accent); padding: 8px 12px; border-radius: var(--radius-sm); font-size: 0.85rem; display: flex; justify-content: space-between; align-items: center; width: 100%;">
+        <div style="color: var(--text-primary);">
+          Saldo a favor: <strong style="font-family: var(--font-mono); font-weight: 700; color: var(--accent);">${formatCurrency(totalAnticipos)}</strong>
+        </div>
+        <button type="button" class="btn btn-xs btn-primary" id="btn-aplicar-anticipo-alerta">Aplicar</button>
+      </div>
+    `;
+    document.getElementById('btn-aplicar-anticipo-alerta')?.addEventListener('click', aplicarAnticipoAlPedido);
+  }
+}
+
+function aplicarAnticipoAlPedido() {
+  const total = calcularTotalPagar(productos);
+  if (total <= 0) {
+    showToast('Agrega productos al pedido antes de aplicar el anticipo', 'error');
+    return;
+  }
+
+  const abonosNoAnticipo = nuevoPedidoAbonos
+    .filter(ab => ab.metodo_pago !== 'Anticipo')
+    .reduce((sum, ab) => sum + Number(ab.monto), 0);
+
+  const saldoPedido = Math.max(0, total - abonosNoAnticipo);
+  if (saldoPedido <= 0.001) {
+    showToast('El pedido ya está cubierto por otros abonos', 'info');
+    return;
+  }
+
+  const totalAnticipos = anticiposDisponibles.reduce((sum, a) => sum + a.saldo, 0);
+  if (totalAnticipos <= 0) {
+    showToast('El cliente no tiene saldo de anticipos disponible', 'error');
+    return;
+  }
+
+  const montoAplicar = Math.min(totalAnticipos, saldoPedido);
+
+  // Distribuir el monto entre los anticipos disponibles
+  let restante = montoAplicar;
+  anticiposAplicados = [];
+
+  for (const ant of anticiposDisponibles) {
+    if (restante <= 0) break;
+    const aUsar = Math.min(ant.saldo, restante);
+    if (aUsar > 0) {
+      anticiposAplicados.push({ docId: ant._docId, monto: Number(aUsar.toFixed(2)) });
+      restante -= aUsar;
+    }
+  }
+
+  // Quitar cualquier abono anterior de tipo Anticipo por seguridad
+  nuevoPedidoAbonos = nuevoPedidoAbonos.filter(ab => ab.metodo_pago !== 'Anticipo');
+
+  // Agregar abono de tipo Anticipo
+  nuevoPedidoAbonos.push({
+    monto: Number(montoAplicar.toFixed(2)),
+    metodo_pago: 'Anticipo',
+    esNuevo: true
+  });
+
+  updateSidebarUI();
+  updateTotals();
+  showToast('Anticipo aplicado al total', 'success');
+}
+
+function quitarAnticipoDelPedido() {
+  nuevoPedidoAbonos = nuevoPedidoAbonos.filter(ab => ab.metodo_pago !== 'Anticipo');
+  anticiposAplicados = [];
+  updateSidebarUI();
+  updateTotals();
+  showToast('Anticipo removido', 'info');
+}
+
 function resetSidebar() {
   productos = [];
   existingTipos = [];
@@ -605,6 +703,8 @@ function resetSidebar() {
   currentProductIndex = null;
   tempProduct = null;
   nuevoPedidoAbonos = [];
+  anticiposDisponibles = [];
+  anticiposAplicados = [];
   isAbonoModalOpen = false;
   isNewClientModalOpen = false;
   tempNewClientName = '';
@@ -614,6 +714,9 @@ function resetSidebar() {
   deletePedidoId = '';
   isUnificarModalOpen = false;
   pedidosActivosCliente = [];
+  
+  const antContainer = document.getElementById('anticipo-cliente-container');
+  if (antContainer) antContainer.innerHTML = '';
   decisionUnificacionTomada = false;
   unificarAbiertoAlGuardar = false;
   
@@ -833,6 +936,7 @@ function updateSidebarUI() {
   if (listContainer) {
     listContainer.innerHTML = renderAllProducts();
   }
+  actualizarAlertaAnticipo();
 }
 
 // ── Events ──
@@ -880,6 +984,11 @@ export function bindPedidosEvents() {
     },
     onSelectClient: async (client) => {
       try {
+        // Cargar anticipos activos del cliente
+        const anticipos = await obtenerAnticiposActivosCliente(client._docId);
+        anticiposDisponibles = anticipos;
+        actualizarAlertaAnticipo();
+
         const activos = await obtenerPedidosActivosCliente(client._docId);
         if (activos.length > 0) {
           pedidosActivosCliente = activos;
@@ -1280,6 +1389,9 @@ export function bindPedidosEvents() {
           `;
           document.getElementById('cs-chip-remove')?.addEventListener('click', () => {
             resetClienteState();
+            anticiposDisponibles = [];
+            anticiposAplicados = [];
+            actualizarAlertaAnticipo();
             const inp = document.getElementById('cs-input');
             if (inp) inp.value = '';
             const sc = document.getElementById('cs-search-mode-container');
@@ -1352,6 +1464,9 @@ export function bindPedidosEvents() {
     if (e.target.closest('#cs-chip-remove')) {
       decisionUnificacionTomada = false;
       pedidosActivosCliente = [];
+      anticiposDisponibles = [];
+      anticiposAplicados = [];
+      actualizarAlertaAnticipo();
     }
 
     // Toggle card dropdown
@@ -1681,7 +1796,8 @@ async function handleSave(confirmacionOmitida = false) {
         abonosIniciales: abonosFinales,
         notas,
         usuario: getCurrentUserProfile(),
-        grupo_id
+        grupo_id,
+        anticiposAplicados
       });
 
       // Si el pedido activo original al que nos unificamos no tenía un grupo_id asignado, lo actualizamos.

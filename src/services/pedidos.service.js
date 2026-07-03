@@ -17,8 +17,63 @@ const COLECCION = 'pedidos';
 /**
  * Create a new order with products and optional first payment inside a transaction to ensure unique sequential IDs
  */
-export async function crearPedido({ cliente, productos, primerAbono, abonosIniciales, notas, usuario, grupo_id }) {
+export async function crearPedido({ cliente, productos, primerAbono, abonosIniciales, notas, usuario, grupo_id, anticiposAplicados }) {
   const normalizedPhone = normalizarTelefono(cliente.telefono);
+
+  if (localStorage.getItem('dev_bypass') === 'true') {
+    // Modo bypass local: simular descuento de anticipos en localStorage
+    if (Array.isArray(anticiposAplicados)) {
+      const dataStr = localStorage.getItem('mock_anticipos');
+      if (dataStr) {
+        const mockAnticipos = JSON.parse(dataStr);
+        anticiposAplicados.forEach(ant => {
+          const idx = mockAnticipos.findIndex(ma => ma._docId === ant.docId);
+          if (idx !== -1) {
+            const ma = mockAnticipos[idx];
+            ma.saldo = Math.max(0, ma.saldo - ant.monto);
+            if (ma.saldo <= 0.001) {
+              ma.estado = 'usado';
+            }
+          }
+        });
+        localStorage.setItem('mock_anticipos', JSON.stringify(mockAnticipos));
+      }
+    }
+
+    // Retornamos un pedido mock simulado para que la UI continúe sin problemas
+    const sub = calcularTotalPagar(productos);
+    const mockPedido = {
+      _docId: 'mock-p-' + Date.now(),
+      id_pedido: String(Math.floor(Math.random() * 900) + 100).padStart(3, '0'),
+      cliente_id: cliente.docId || 'mock-cliente-1',
+      cliente_nombre: cliente.nombre.trim(),
+      cliente_telefono: normalizedPhone,
+      productos: productos.map(p => ({
+        id_producto: generateProductId(),
+        producto_tipo: p.producto_tipo.trim(),
+        detalle_personalizado: p.detalle_personalizado.trim(),
+        cantidad: Number(p.cantidad) || 1,
+        precio_unitario: Number(p.precio_unitario) || 0,
+        subtotal: calcularSubtotal(p.cantidad, p.precio_unitario)
+      })),
+      abonos: (abonosIniciales || []).map(ab => ({
+        id_abono: generateAbonoId(),
+        fecha_pago: { seconds: Math.floor(Date.now() / 1000) },
+        monto: Number(ab.monto),
+        metodo_pago: ab.metodo_pago || 'Efectivo',
+        usuario: usuario ? { nombre: usuario.nombre, email: usuario.email } : null
+      })),
+      total_pagar: sub,
+      total_abonado: (abonosIniciales || []).reduce((sum, ab) => sum + Number(ab.monto), 0),
+      saldo_pendiente: Math.max(0, sub - (abonosIniciales || []).reduce((sum, ab) => sum + Number(ab.monto), 0)),
+      estado_pago: 'PARCIAL',
+      estado_produccion: 'PENDIENTE',
+      fecha_creacion: { seconds: Math.floor(Date.now() / 1000) },
+      notas: (notes => (notes || '').trim())(notas),
+      grupo_id: grupo_id || null
+    };
+    return mockPedido;
+  }
 
   // Save/Update client to get their Firestore docId
   const clienteId = await guardarCliente({
@@ -127,6 +182,30 @@ export async function crearPedido({ cliente, productos, primerAbono, abonosInici
           email: usuario.email || ''
         } : null
       });
+    }
+
+    // Debitar los anticipos dentro de la transacción
+    if (Array.isArray(anticiposAplicados)) {
+      for (const ant of anticiposAplicados) {
+        if (!ant.docId || ant.monto <= 0) continue;
+        const antRef = doc(db, 'anticipos', ant.docId);
+        const antSnap = await transaction.get(antRef);
+        if (!antSnap.exists()) throw new Error('Uno de los anticipos aplicados no existe.');
+        const antData = antSnap.data();
+
+        if (antData.estado !== 'activo' || antData.saldo < ant.monto) {
+          throw new Error(`El anticipo de ${antData.cliente_nombre} no tiene saldo suficiente o ya no está activo.`);
+        }
+
+        const nuevoSaldo = Math.max(0, antData.saldo - ant.monto);
+        const nuevoEstado = nuevoSaldo <= 0.001 ? 'usado' : 'activo';
+
+        transaction.update(antRef, {
+          saldo: nuevoSaldo,
+          estado: nuevoEstado,
+          updated_at: Timestamp.now()
+        });
+      }
     }
 
     const pedido = {
