@@ -826,7 +826,7 @@ function renderCajaData() {
         <td style="color: var(--text-secondary); font-size:0.85rem;">${fechaStr}</td>
         <td>${badgeTipo}</td>
         <td>${pedidoCol}</td>
-        <td style="font-weight: 600;">${a.cliente_nombre}</td>
+        <td class="cliente-nombre-uppercase" style="font-weight: 600;">${a.cliente_nombre}</td>
         <td>
           <span class="badge-metodo ${badgeClass}">${a.metodo_pago}</span>
         </td>

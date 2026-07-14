@@ -2,7 +2,7 @@ import { renderProductForm, renderProductListRow, createEmptyProduct } from '../
 import { renderAbonoFormModal, showAbonoModal } from '../components/abonoForm.js';
 import { calcularSubtotal, calcularTotalPagar } from '../utils/calculations.js';
 import { formatCurrency, formatDate } from '../utils/formatters.js';
-import { crearPedido, actualizarPedido, obtenerPedido, obtenerPedidosRecientes, obtenerTiposProducto, eliminarPedido, escucharPedidosRecientes, agruparPedidos, obtenerPedidosActivosCliente, actualizarGrupoPedido } from '../services/pedidos.service.js';
+import { crearPedido, actualizarPedido, obtenerPedido, obtenerPedidosRecientes, obtenerTiposProducto, eliminarPedido, escucharPedidosRecientes, agruparPedidos, obtenerPedidosActivosCliente, actualizarGrupoPedido, obtenerPedidosPendientesCobroCliente } from '../services/pedidos.service.js';
 import { guardarProducto, obtenerProductosGuardados, eliminarProductoGuardado } from '../services/productosGuardados.service.js';
 import { guardarCliente, obtenerCliente } from '../services/clientes.service.js';
 import { obtenerAnticiposActivosCliente } from '../services/anticipos.service.js';
@@ -25,6 +25,7 @@ let savedProducts = [];
 let nuevoPedidoAbonos = [];
 let anticiposDisponibles = [];
 let anticiposAplicados = [];
+let cobrosPendientesCliente = [];
 let isAbonoModalOpen = false;
 let isNewClientModalOpen = false;
 let tempNewClientName = '';
@@ -39,6 +40,7 @@ let unificarAbiertoAlGuardar = false;
 let documentClickHandler = null;
 let unsubscribePedidos = null;
 let colapsados = { PENDIENTE: false, EN_PROCESO: false, ENTREGADO: true };
+let shouldPrintOnSave = true;
 
 function actualizarListadoProductosGuardados() {
   const savedSection = document.getElementById('saved-products-section');
@@ -110,6 +112,7 @@ export function renderPedidos() {
           </div>
           ${renderClienteSearch()}
           <div id="anticipo-cliente-container" style="margin-top: 8px;"></div>
+          <div id="valores-pendientes-cliente-container" style="margin-top: 8px;"></div>
         </div>
 
         <div style="height: 1px; background: var(--border); margin-bottom: 16px;"></div>
@@ -156,6 +159,9 @@ export function renderPedidos() {
       <div class="sidebar-footer">
         <button type="button" class="btn btn-secondary" id="btn-cancel-sidebar" style="flex: 1;">
           Cancelar
+        </button>
+        <button type="button" class="btn btn-secondary" id="btn-save-only" style="flex: 1.5;">
+          Guardar
         </button>
         <button type="button" class="btn btn-primary" id="btn-save-print" style="flex: 2;">
           Guardar e Imprimir
@@ -634,6 +640,26 @@ function actualizarAlertaAnticipo() {
   }
 }
 
+function actualizarAlertaValoresPendientes() {
+  const container = document.getElementById('valores-pendientes-cliente-container');
+  if (!container) return;
+
+  if (cobrosPendientesCliente.length === 0) {
+    container.innerHTML = '';
+    return;
+  }
+
+  const totalPendiente = cobrosPendientesCliente.reduce((sum, p) => sum + (p.saldo_pendiente || 0), 0);
+
+  container.innerHTML = `
+    <div class="cs-selected-client-row" style="background: rgba(229, 57, 53, 0.08); border: 1px solid var(--accent); padding: 8px 12px; border-radius: var(--radius-sm); font-size: 0.85rem; display: flex; justify-content: space-between; align-items: center; width: 100%;">
+      <div style="color: var(--text-primary); font-weight: 500;">
+        Valores pendientes: <strong style="font-family: var(--font-mono); font-weight: 700; color: var(--accent);">${formatCurrency(totalPendiente)}</strong>
+      </div>
+    </div>
+  `;
+}
+
 function aplicarAnticipoAlPedido() {
   const total = calcularTotalPagar(productos);
   if (total <= 0) {
@@ -717,6 +743,9 @@ function resetSidebar() {
   
   const antContainer = document.getElementById('anticipo-cliente-container');
   if (antContainer) antContainer.innerHTML = '';
+  const cobContainer = document.getElementById('valores-pendientes-cliente-container');
+  if (cobContainer) cobContainer.innerHTML = '';
+  cobrosPendientesCliente = [];
   decisionUnificacionTomada = false;
   unificarAbiertoAlGuardar = false;
   
@@ -771,6 +800,7 @@ function updateSidebarUI() {
   const modalContainer = document.getElementById('app-modal-container');
   const listContainer = document.getElementById('products-list-container');
   const saveBtn = document.getElementById('btn-save-print');
+  const saveOnlyBtn = document.getElementById('btn-save-only');
   const total = calcularTotalPagar(productos);
   const abonoSummaryContainer = document.getElementById('abono-summary-container');
 
@@ -927,6 +957,15 @@ function updateSidebarUI() {
     }
   }
 
+  if (saveOnlyBtn) {
+    if (editingPedidoId) {
+      saveOnlyBtn.style.display = 'none';
+    } else {
+      saveOnlyBtn.style.display = '';
+      saveOnlyBtn.disabled = !!(deletePedidoId || isFormOpen || isAbonoModalOpen || isUnificarModalOpen || isNewClientModalOpen);
+    }
+  }
+
   // Update sidebar title
   const sidebarTitleEl = document.querySelector('.sidebar-title');
   if (sidebarTitleEl) sidebarTitleEl.textContent = editingPedidoId ? 'Editar Pedido' : 'Nuevo Pedido';
@@ -937,6 +976,7 @@ function updateSidebarUI() {
     listContainer.innerHTML = renderAllProducts();
   }
   actualizarAlertaAnticipo();
+  actualizarAlertaValoresPendientes();
 }
 
 // ── Events ──
@@ -988,6 +1028,11 @@ export function bindPedidosEvents() {
         const anticipos = await obtenerAnticiposActivosCliente(client._docId);
         anticiposDisponibles = anticipos;
         actualizarAlertaAnticipo();
+
+        // Cargar pedidos con saldo pendiente del cliente
+        const cobros = await obtenerPedidosPendientesCobroCliente(client._docId);
+        cobrosPendientesCliente = cobros;
+        actualizarAlertaValoresPendientes();
 
         const activos = await obtenerPedidosActivosCliente(client._docId);
         if (activos.length > 0) {
@@ -1391,7 +1436,9 @@ export function bindPedidosEvents() {
             resetClienteState();
             anticiposDisponibles = [];
             anticiposAplicados = [];
+            cobrosPendientesCliente = [];
             actualizarAlertaAnticipo();
+            actualizarAlertaValoresPendientes();
             const inp = document.getElementById('cs-input');
             if (inp) inp.value = '';
             const sc = document.getElementById('cs-search-mode-container');
@@ -1466,7 +1513,9 @@ export function bindPedidosEvents() {
       pedidosActivosCliente = [];
       anticiposDisponibles = [];
       anticiposAplicados = [];
+      cobrosPendientesCliente = [];
       actualizarAlertaAnticipo();
+      actualizarAlertaValoresPendientes();
     }
 
     // Toggle card dropdown
@@ -1648,7 +1697,14 @@ export function bindPedidosEvents() {
   }
 
   // Save button
-  document.getElementById('btn-save-print')?.addEventListener('click', handleSave);
+  document.getElementById('btn-save-print')?.addEventListener('click', () => {
+    shouldPrintOnSave = true;
+    handleSave();
+  });
+  document.getElementById('btn-save-only')?.addEventListener('click', () => {
+    shouldPrintOnSave = false;
+    handleSave();
+  });
 
   // Filter dropdown listeners
   const filterToggle = document.getElementById('btn-filter-toggle');
@@ -1746,11 +1802,14 @@ async function handleSave(confirmacionOmitida = false) {
   if (!editingPedidoId && !decisionUnificacionTomada) {
     try {
       const btn = document.getElementById('btn-save-print');
+      const btnSaveOnly = document.getElementById('btn-save-only');
       if (btn) { btn.disabled = true; btn.innerHTML = '<div class="spinner"></div> Verificando...'; }
+      if (btnSaveOnly) { btnSaveOnly.disabled = true; }
       
       const activos = await obtenerPedidosActivosCliente(clienteState.docId);
       
       if (btn) { btn.disabled = false; btn.innerHTML = 'Guardar e Imprimir'; }
+      if (btnSaveOnly) { btnSaveOnly.disabled = false; }
 
       if (activos.length > 0) {
         pedidosActivosCliente = activos;
@@ -1768,7 +1827,9 @@ async function handleSave(confirmacionOmitida = false) {
 
   saving = true;
   const btn = document.getElementById('btn-save-print');
+  const btnSaveOnly = document.getElementById('btn-save-only');
   if (btn) { btn.disabled = true; btn.innerHTML = '<div class="spinner"></div> Guardando...'; }
+  if (btnSaveOnly) { btnSaveOnly.disabled = true; }
 
   try {
     const notas = document.getElementById('pedido-notas')?.value || '';
@@ -1810,30 +1871,32 @@ async function handleSave(confirmacionOmitida = false) {
 
       closeSidebar();
       showToast('Pedido creado', 'success');
-      if (savedPedido.grupo_id) {
-        try {
-          const activosDelGrupo = await obtenerPedidosActivosCliente(clienteState.docId);
-          const grupoPedidos = activosDelGrupo.filter(p => p.grupo_id === savedPedido.grupo_id || p._docId === savedPedido.grupo_id);
-          
-          if (grupoPedidos.length > 0) {
-            const principal = grupoPedidos.find(p => p._docId === savedPedido.grupo_id) || grupoPedidos[0];
-            const grupoObj = {
-              isGrupo: true,
-              grupo_id: savedPedido.grupo_id,
-              cliente_nombre: savedPedido.cliente_nombre,
-              cliente_telefono: savedPedido.cliente_telefono,
-              pedidos: grupoPedidos,
-              fecha_creacion: principal.fecha_creacion
-            };
-            imprimirReciboDirecto(grupoObj);
-          } else {
+      if (shouldPrintOnSave) {
+        if (savedPedido.grupo_id) {
+          try {
+            const activosDelGrupo = await obtenerPedidosActivosCliente(clienteState.docId);
+            const grupoPedidos = activosDelGrupo.filter(p => p.grupo_id === savedPedido.grupo_id || p._docId === savedPedido.grupo_id);
+            
+            if (grupoPedidos.length > 0) {
+              const principal = grupoPedidos.find(p => p._docId === savedPedido.grupo_id) || grupoPedidos[0];
+              const grupoObj = {
+                isGrupo: true,
+                grupo_id: savedPedido.grupo_id,
+                cliente_nombre: savedPedido.cliente_nombre,
+                cliente_telefono: savedPedido.cliente_telefono,
+                pedidos: grupoPedidos,
+                fecha_creacion: principal.fecha_creacion
+              };
+              imprimirReciboDirecto(grupoObj);
+            } else {
+              imprimirReciboDirecto(savedPedido);
+            }
+          } catch {
             imprimirReciboDirecto(savedPedido);
           }
-        } catch {
+        } else {
           imprimirReciboDirecto(savedPedido);
         }
-      } else {
-        imprimirReciboDirecto(savedPedido);
       }
     }
 
@@ -1848,7 +1911,8 @@ async function handleSave(confirmacionOmitida = false) {
     showToast('Error al guardar: ' + err.message, 'error');
   } finally {
     saving = false;
-    if (btn) { btn.disabled = false; btn.innerHTML = 'Guardar e Imprimir'; }
+    if (btn) { btn.disabled = false; btn.innerHTML = editingPedidoId ? 'Actualizar Pedido' : 'Guardar e Imprimir'; }
+    if (btnSaveOnly) { btnSaveOnly.disabled = false; }
     isUnificarModalOpen = false;
     pedidosActivosCliente = [];
   }

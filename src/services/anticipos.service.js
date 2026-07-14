@@ -61,7 +61,7 @@ export async function crearAnticipo({ cliente, monto, metodo_pago, usuario }) {
 
   const nuevoAnticipo = {
     cliente_id: cliente.docId || cliente._docId,
-    cliente_nombre: cliente.nombre.trim(),
+    cliente_nombre: cliente.nombre.trim().toUpperCase(),
     cliente_telefono: cliente.telefono || '',
     monto: numMonto,
     saldo: numMonto,

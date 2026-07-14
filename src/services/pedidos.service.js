@@ -10,7 +10,7 @@ import {
   calcularSaldoPendiente, determinarEstadoPago, recalcularOrden
 } from '../utils/calculations.js';
 import { generateAbonoId, generateProductId, normalizarTelefono } from '../utils/formatters.js';
-import { guardarCliente, incrementarPedidosCliente } from './clientes.service.js';
+import { guardarCliente } from './clientes.service.js';
 
 const COLECCION = 'pedidos';
 
@@ -46,7 +46,7 @@ export async function crearPedido({ cliente, productos, primerAbono, abonosInici
       _docId: 'mock-p-' + Date.now(),
       id_pedido: String(Math.floor(Math.random() * 900) + 100).padStart(3, '0'),
       cliente_id: cliente.docId || 'mock-cliente-1',
-      cliente_nombre: cliente.nombre.trim(),
+      cliente_nombre: cliente.nombre.trim().toUpperCase(),
       cliente_telefono: normalizedPhone,
       productos: productos.map(p => ({
         id_producto: generateProductId(),
@@ -211,7 +211,7 @@ export async function crearPedido({ cliente, productos, primerAbono, abonosInici
     const pedido = {
       id_pedido,
       cliente_id: clienteId,
-      cliente_nombre: cliente.nombre.trim(),
+      cliente_nombre: cliente.nombre.trim().toUpperCase(),
       cliente_telefono: normalizedPhone,
       productos: productosProcessed,
       abonos,
@@ -232,9 +232,6 @@ export async function crearPedido({ cliente, productos, primerAbono, abonosInici
 
     finalPedido = { ...pedido, _docId: docRef.id };
   });
-
-  // Increment total_pedidos on client record asynchronously
-  incrementarPedidosCliente(clienteId);
 
   return finalPedido;
 }
@@ -673,4 +670,21 @@ export function agruparPedidos(pedidosList) {
 
   return result;
 }
+
+/**
+ * Obtener pedidos con saldo pendiente de un cliente (para cobros pendientes)
+ */
+export async function obtenerPedidosPendientesCobroCliente(clienteId) {
+  if (!clienteId) return [];
+  const q = query(
+    collection(db, COLECCION),
+    where('cliente_id', '==', clienteId),
+    where('estado_produccion', '==', 'ENTREGADO')
+  );
+  const snap = await getDocs(q);
+  return snap.docs
+    .map(d => ({ _docId: d.id, ...d.data() }))
+    .filter(p => p.saldo_pendiente > 0.001);
+}
+
 

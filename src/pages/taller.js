@@ -351,7 +351,7 @@ function renderDetail(pedido) {
                   <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
                 </button>
               </div>
-              <div style="font-size:1.2rem; font-weight:800;">${pedido.cliente_nombre}</div>
+              <div class="cliente-nombre-uppercase" style="font-size:1.2rem; font-weight:800;">${pedido.cliente_nombre}</div>
               ${pedido.cliente_telefono ? `<div style="color:var(--text-tertiary); font-size:0.85rem; margin-top:2px; display:flex; align-items:center; gap:6px;"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg> ${pedido.cliente_telefono}</div>` : ''}
               <div style="color:var(--text-tertiary); font-size:0.78rem; margin-top:4px;">${formatDate(pedido.fecha_creacion)}</div>
             </div>

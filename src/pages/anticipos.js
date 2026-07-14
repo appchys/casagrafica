@@ -289,7 +289,7 @@ function renderTable() {
     return `
       <tr style="${a.estado === 'anulado' ? 'opacity:0.65;' : ''}">
         <td style="color: var(--text-secondary); font-size:0.85rem;">${fechaStr}</td>
-        <td style="font-weight: 700; color: var(--text-primary);">${a.cliente_nombre}</td>
+        <td class="cliente-nombre-uppercase" style="font-weight: 700; color: var(--text-primary);">${a.cliente_nombre}</td>
         <td style="font-family: var(--font-mono);">${formatCurrency(a.monto)}</td>
         <td style="font-family: var(--font-mono); font-weight: 700;">${formatCurrency(a.saldo)}</td>
         <td><span class="badge-metodo badge-otro" style="font-size:0.68rem;">${a.metodo_pago}</span></td>

@@ -176,7 +176,7 @@ service cloud.firestore {
              data.keys().hasOnly([
                'cliente_id', 'cliente_nombre', 'cliente_telefono',
                'monto', 'saldo', 'estado', 'fecha_creacion', 'metodo_pago',
-               'usuario', 'usuario_anulacion', 'fecha_anulacion'
+               'usuario', 'usuario_anulacion', 'fecha_anulacion', 'updated_at'
              ]) &&
              isValidString(data.cliente_id, 128) &&
              isValidString(data.cliente_nombre, 128) &&
@@ -200,7 +200,8 @@ service cloud.firestore {
                isValidString(data.usuario_anulacion.nombre, 128) &&
                isValidString(data.usuario_anulacion.email, 128)
              )) &&
-             (!('fecha_anulacion' in data) || data.fecha_anulacion is timestamp);
+             (!('fecha_anulacion' in data) || data.fecha_anulacion is timestamp) &&
+             (!('updated_at' in data) || data.updated_at is timestamp);
     }
 
     function isValidEgreso(data) {
@@ -350,7 +351,7 @@ service cloud.firestore {
         isAdmin() || hasPermission('gestionar_caja') || hasPermission('crear_pedidos')
       );
       allow update: if isAuthenticated() && isValidAnticipo(request.resource.data) && (
-        isAdmin() || hasPermission('gestionar_caja')
+        isAdmin() || hasPermission('gestionar_caja') || hasPermission('crear_pedidos') || hasPermission('editar_pedidos')
       );
       allow delete: if isAdmin();
     }

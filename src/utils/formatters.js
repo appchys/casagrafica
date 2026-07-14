@@ -136,3 +136,18 @@ export function normalizarTelefono(tel) {
   return '+' + limpio.replace(/\D/g, '');
 }
 
+/**
+ * Normaliza un texto eliminando tildes, diéresis y convirtiendo la ñ en n
+ * de forma case-insensitive, recortando espacios al inicio y final.
+ */
+export function normalizarTexto(str) {
+  if (!str) return '';
+  return str
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "") // Remueve tildes y diéresis
+    .toLowerCase()
+    .replace(/ñ/g, 'n')
+    .trim();
+}
+
+

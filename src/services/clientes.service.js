@@ -1,51 +1,73 @@
 import { db } from '../firebase.js';
 import {
   collection, doc, setDoc, getDocs, query,
-  where, orderBy, limit, Timestamp, getDoc, updateDoc, increment
+  orderBy, limit, Timestamp, getDoc, updateDoc
 } from 'firebase/firestore';
-import { normalizarTelefono } from '../utils/formatters.js';
+import { normalizarTelefono, normalizarTexto } from '../utils/formatters.js';
 
 const COL = 'clientes';
 
+// Caché en memoria para clientes
+let clientesCache = null;
+let lastFetchTime = 0;
+const CACHE_DURATION = 3 * 60 * 1000; // 3 minutos
+
 /**
- * Search clients by name prefix (case-insensitive, client-side filter on top 100)
+ * Asegura que los clientes estén cargados en el caché en memoria
+ */
+async function asegurarClientesCargados() {
+  const ahora = Date.now();
+  if (clientesCache && (ahora - lastFetchTime < CACHE_DURATION)) {
+    return clientesCache;
+  }
+
+  const q = query(
+    collection(db, COL),
+    orderBy('nombre_lower'),
+    limit(3000)
+  );
+  const snap = await getDocs(q);
+  clientesCache = snap.docs.map(d => ({ _docId: d.id, ...d.data() }));
+  lastFetchTime = ahora;
+  return clientesCache;
+}
+
+/**
+ * Precarga el listado de clientes en segundo plano
+ */
+export async function precargarClientes() {
+  try {
+    await asegurarClientesCargados();
+  } catch (err) {
+    console.error("Error precargando clientes:", err);
+  }
+}
+
+/**
+ * Search clients by name prefix (case-insensitive, using in-memory cache)
  */
 export async function buscarClientesPorNombre(texto) {
   if (!texto || texto.trim().length < 2) return [];
 
-  // Fetch ordered by nombre, filter client-side (Firestore no supports case-insensitive search natively)
-  const q = query(
-    collection(db, COL),
-    orderBy('nombre_lower'),
-    limit(100)
-  );
-  const snap = await getDocs(q);
-  const lower = texto.trim().toLowerCase();
+  const clientes = await asegurarClientesCargados();
+  const lower = normalizarTexto(texto);
 
-  return snap.docs
-    .map(d => ({ _docId: d.id, ...d.data() }))
-    .filter(c => c.nombre_lower?.includes(lower))
+  return clientes
+    .filter(c => normalizarTexto(c.nombre || '').includes(lower))
     .slice(0, 8);
 }
 
 /**
- * Search clients by phone number (prefix match, ignoring country code +593 or local leading zero)
+ * Search clients by phone number (prefix match, using in-memory cache)
  */
 export async function buscarClientesPorTelefono(telefono) {
   if (!telefono || telefono.trim().length < 2) return [];
 
-  const q = query(
-    collection(db, COL),
-    orderBy('telefono'),
-    limit(100)
-  );
-  const snap = await getDocs(q);
-  
+  const clientes = await asegurarClientesCargados();
   const cleanTerm = cleanPhoneForSearch(telefono);
-  if (!cleanTerm) return []; // avoid matching empty strings
+  if (!cleanTerm) return [];
 
-  return snap.docs
-    .map(d => ({ _docId: d.id, ...d.data() }))
+  return clientes
     .filter(c => {
       const cleanDbPhone = cleanPhoneForSearch(c.telefono || '');
       return cleanDbPhone.includes(cleanTerm);
@@ -59,13 +81,10 @@ export async function buscarClientesPorTelefono(telefono) {
  */
 function cleanPhoneForSearch(num) {
   if (!num) return '';
-  // 1. Solo dígitos
   let clean = num.replace(/\D/g, '');
-  // 2. Remover cero inicial si lo tiene
   if (clean.startsWith('0')) {
     clean = clean.slice(1);
   }
-  // 3. Remover código de Ecuador si lo tiene
   if (clean.startsWith('593')) {
     clean = clean.slice(3);
   }
@@ -78,6 +97,7 @@ function cleanPhoneForSearch(num) {
  */
 export async function guardarCliente({ nombre, telefono, _docId, ruc, email, direccion }) {
   const normalizedPhone = normalizarTelefono(telefono);
+  let finalDocId = _docId;
 
   if (_docId) {
     const ref = doc(db, COL, _docId);
@@ -86,45 +106,53 @@ export async function guardarCliente({ nombre, telefono, _docId, ruc, email, dir
       updated_at: Timestamp.now(),
     };
     if (nombre) {
-      updateData.nombre = nombre.trim();
-      updateData.nombre_lower = nombre.trim().toLowerCase();
+      updateData.nombre = nombre.trim().toUpperCase();
+      updateData.nombre_lower = normalizarTexto(nombre);
     }
     if (ruc) updateData.ruc = ruc;
     if (email) updateData.email = email;
     if (direccion) updateData.direccion = direccion;
     await updateDoc(ref, updateData);
-    return _docId;
+  } else {
+    // New client
+    const ref = doc(collection(db, COL));
+    const extraFields = {};
+    if (ruc) extraFields.ruc = ruc;
+    if (email) extraFields.email = email;
+    if (direccion) extraFields.direccion = direccion;
+    await setDoc(ref, {
+      nombre: nombre.trim().toUpperCase(),
+      nombre_lower: normalizarTexto(nombre),
+      telefono: normalizedPhone,
+      fecha_creacion: Timestamp.now(),
+      updated_at: Timestamp.now(),
+      ...extraFields,
+    });
+    finalDocId = ref.id;
   }
 
-  // New client
-  const ref = doc(collection(db, COL));
-  const extraFields = {};
-  if (ruc) extraFields.ruc = ruc;
-  if (email) extraFields.email = email;
-  if (direccion) extraFields.direccion = direccion;
-  await setDoc(ref, {
-    nombre: nombre.trim(),
-    nombre_lower: nombre.trim().toLowerCase(),
-    telefono: normalizedPhone,
-    fecha_creacion: Timestamp.now(),
-    updated_at: Timestamp.now(),
-    total_pedidos: 0,
-    ...extraFields,
-  });
-  return ref.id;
-}
-
-/**
- * Increment total_pedidos counter on a client document
- */
-export async function incrementarPedidosCliente(clienteDocId) {
-  if (!clienteDocId) return;
-  try {
-    const ref = doc(db, COL, clienteDocId);
-    await updateDoc(ref, { total_pedidos: increment(1) });
-  } catch {
-    // Non-critical, ignore
+  // Sincronizar el caché en memoria
+  if (clientesCache) {
+    const idx = clientesCache.findIndex(c => c._docId === finalDocId);
+    const cliData = {
+      _docId: finalDocId,
+      nombre: nombre.trim().toUpperCase(),
+      nombre_lower: normalizarTexto(nombre),
+      telefono: normalizedPhone,
+      ruc: ruc || '',
+      email: email || '',
+      direccion: direccion || '',
+      updated_at: Timestamp.now()
+    };
+    if (idx !== -1) {
+      clientesCache[idx] = { ...clientesCache[idx], ...cliData };
+    } else {
+      clientesCache.push({ ...cliData, fecha_creacion: Timestamp.now() });
+      clientesCache.sort((a, b) => (a.nombre_lower || '').localeCompare(b.nombre_lower || ''));
+    }
   }
+
+  return finalDocId;
 }
 
 /**

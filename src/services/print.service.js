@@ -128,17 +128,11 @@ export function generarReciboHTML(pedido) {
         TODO TRABAJO, ANTES DE IMPRIMIR SERÁ REVISADO Y CONFIRMADO POR EL CLIENTE ASUMIENDO TODA LA RESPONSABILIDAD DEL DISEÑO
       </div>
       
-      <div class="receipt-copy-label">${labelCopia}</div>
+      ${labelCopia ? `<div class="receipt-copy-label">${labelCopia}</div>` : ''}
     </div>
   `;
 
-  return `
-    <!-- COPIA 1: CLIENTE -->
-    ${generarTicketCopia('— COPIA CLIENTE —')}
-
-    <!-- COPIA 2: TALLER -->
-    ${generarTicketCopia('— COPIA TALLER —')}
-  `;
+  return generarTicketCopia('');
 }
 
 /**

@@ -1,4 +1,4 @@
-import { buscarClientesPorNombre, buscarClientesPorTelefono } from '../services/clientes.service.js';
+import { buscarClientesPorNombre, buscarClientesPorTelefono, precargarClientes } from '../services/clientes.service.js';
 
 /**
  * ClienteState — shared state representing the currently selected/written client
@@ -74,6 +74,13 @@ export function bindClienteSearch(callbacks = {}) {
   const iconEl          = document.getElementById('cs-icon');
 
   if (!input) return;
+
+  // Precargar clientes de inmediato en segundo plano
+  precargarClientes();
+
+  input.addEventListener('focus', () => {
+    precargarClientes();
+  });
 
   // Helper helper to check if value typed is a phone number pattern
   function checkIsPhonePattern(val) {
@@ -177,7 +184,6 @@ export function bindClienteSearch(callbacks = {}) {
         <div>
           <div class="cs-option-label">${highlightMatch(c.nombre, searchVal)}</div>
           ${c.telefono ? `<div class="cs-option-sub">Celular: ${c.telefono}</div>` : ''}
-          ${c.total_pedidos > 0 ? `<div class="cs-option-sub">${c.total_pedidos} pedido(s) anteriores</div>` : ''}
         </div>
       </div>
     `).join('');
