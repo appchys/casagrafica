@@ -10,6 +10,8 @@ export function renderNavbar(currentPage, userEmail, permissions = [], userName 
   const showUsuarios = permissions.includes('gestionar_usuarios');
   const showCaja = permissions.includes('gestionar_caja');
   const showPorCobrar = permissions.includes('ver_por_cobrar');
+  const isAdmin = userName && userName.toLowerCase().includes('admin');
+  const showNotificaciones = isAdmin || permissions.includes('gestionar_usuarios');
 
   return `
     <nav class="navbar" id="main-navbar">
@@ -134,6 +136,16 @@ export function renderNavbar(currentPage, userEmail, permissions = [], userName 
               </svg>
             </span>
             <span class="nav-label">Usuarios</span>
+          </a>
+        </li>
+        ` : ''}
+        ${showNotificaciones ? `
+        <li>
+          <a href="/notificaciones" class="drawer-nav-item ${currentPage === 'notificaciones' ? 'active' : ''}">
+            <span class="nav-icon" style="display:inline-flex; align-items:center;">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
+            </span>
+            <span class="nav-label">Notificaciones</span>
           </a>
         </li>
         ` : ''}

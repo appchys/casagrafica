@@ -12,6 +12,7 @@ import { renderCaja, bindCajaEvents, cleanupCaja } from './pages/caja.js';
 import { renderPorCobrar, bindPorCobrarEvents, cleanupPorCobrar } from './pages/por_cobrar.js';
 import { renderAnticipos, bindAnticiposEvents, cleanupAnticipos } from './pages/anticipos.js';
 import { renderClientes, bindClientesEvents, cleanupClientes } from './pages/clientes.js';
+import { renderNotificaciones, bindNotificacionesEvents, cleanupNotificaciones } from './pages/notificaciones.js';
 import { obtenerUsuario } from './services/usuarios.service.js';
 import { escucharSesionActiva } from './services/caja.service.js';
 
@@ -145,6 +146,9 @@ function getRoute() {
   if (path.startsWith('/anticipos')) {
     return { page: 'anticipos', docId: null };
   }
+  if (path.startsWith('/notificaciones')) {
+    return { page: 'notificaciones', docId: null };
+  }
   if (path.startsWith('/clientes')) {
     return { page: 'clientes', docId: null };
   }
@@ -173,6 +177,8 @@ function renderPage(user, profile) {
     authorized = permissions.includes('ver_por_cobrar');
   } else if (page === 'anticipos') {
     authorized = permissions.includes('crear_pedidos') || permissions.includes('editar_pedidos');
+  } else if (page === 'notificaciones') {
+    authorized = profile?.rol === 'admin' || permissions.includes('gestionar_usuarios');
   } else if (page === 'clientes') {
     authorized = true;
   }
@@ -225,6 +231,8 @@ function renderPage(user, profile) {
     content = renderPorCobrar();
   } else if (page === 'anticipos') {
     content = renderAnticipos();
+  } else if (page === 'notificaciones') {
+    content = renderNotificaciones();
   } else if (page === 'clientes') {
     content = renderClientes();
   } else {
@@ -255,6 +263,9 @@ function renderPage(user, profile) {
   } else if (page === 'anticipos') {
     bindAnticiposEvents();
     currentCleanup = cleanupAnticipos;
+  } else if (page === 'notificaciones') {
+    bindNotificacionesEvents();
+    currentCleanup = cleanupNotificaciones;
   } else if (page === 'clientes') {
     bindClientesEvents();
     currentCleanup = cleanupClientes;
