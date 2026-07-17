@@ -1,7 +1,7 @@
 import { db } from '../firebase.js';
 import {
   collection, doc, setDoc, getDocs, query,
-  orderBy, limit, Timestamp, getDoc, updateDoc
+  orderBy, limit, Timestamp, getDoc, updateDoc, deleteDoc
 } from 'firebase/firestore';
 import { normalizarTelefono, normalizarTexto } from '../utils/formatters.js';
 
@@ -126,6 +126,7 @@ export async function guardarCliente({ nombre, telefono, _docId, ruc, email, dir
       telefono: normalizedPhone,
       fecha_creacion: Timestamp.now(),
       updated_at: Timestamp.now(),
+      total_pedidos: 0,
       ...extraFields,
     });
     finalDocId = ref.id;
@@ -147,7 +148,7 @@ export async function guardarCliente({ nombre, telefono, _docId, ruc, email, dir
     if (idx !== -1) {
       clientesCache[idx] = { ...clientesCache[idx], ...cliData };
     } else {
-      clientesCache.push({ ...cliData, fecha_creacion: Timestamp.now() });
+      clientesCache.push({ ...cliData, total_pedidos: 0, fecha_creacion: Timestamp.now() });
       clientesCache.sort((a, b) => (a.nombre_lower || '').localeCompare(b.nombre_lower || ''));
     }
   }
@@ -163,3 +164,21 @@ export async function obtenerCliente(docId) {
   if (!snap.exists()) return null;
   return { _docId: snap.id, ...snap.data() };
 }
+
+/**
+ * Delete a client by docId and sync memory cache
+ */
+export async function eliminarCliente(docId) {
+  await deleteDoc(doc(db, COL, docId));
+  if (clientesCache) {
+    clientesCache = clientesCache.filter(c => c._docId !== docId);
+  }
+}
+
+/**
+ * Get all clients (using the in-memory cache helper)
+ */
+export async function obtenerTodosClientes() {
+  return await asegurarClientesCargados();
+}
+

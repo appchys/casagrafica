@@ -298,15 +298,11 @@ service cloud.firestore {
     match /clientes/{clienteId} {
       allow read: if isAuthenticated();
       
-      allow create: if isAuthenticated() && isValidCliente(request.resource.data) && (
-        isAdmin() || hasPermission('crear_pedidos') || hasPermission('editar_pedidos')
-      );
+      allow create: if isAuthenticated() && isValidCliente(request.resource.data);
       
-      allow update: if isAuthenticated() && isValidCliente(request.resource.data) && (
-        isAdmin() || hasPermission('crear_pedidos') || hasPermission('editar_pedidos')
-      );
+      allow update: if isAuthenticated() && isValidCliente(request.resource.data);
 
-      allow delete: if isAdmin();
+      allow delete: if isAuthenticated();
     }
 
     // Colección de productos guardados

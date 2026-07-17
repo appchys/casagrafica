@@ -1824,98 +1824,144 @@ async function handleSave(confirmacionOmitida = false) {
   }
 
   const abonosFinales = nuevoPedidoAbonos.map(ab => ({ ...ab, monto: Number(ab.monto) }));
+  const notas = document.getElementById('pedido-notas')?.value || '';
+  const copiaproductos = [...productos];
+  const copiacliente = {
+    docId: clienteState.docId,
+    nombre: clienteState.nombre,
+    telefono: clienteState.telefono,
+    isNew: clienteState.isNew
+  };
+  const copiaAnticiposAplicados = [...anticiposAplicados];
+  const copiaPedidosActivosCliente = [...pedidosActivosCliente];
+  const isEditMode = !!editingPedidoId;
+  const targetEditingPedidoId = editingPedidoId;
 
-  saving = true;
-  const btn = document.getElementById('btn-save-print');
-  const btnSaveOnly = document.getElementById('btn-save-only');
-  if (btn) { btn.disabled = true; btn.innerHTML = '<div class="spinner"></div> Guardando...'; }
-  if (btnSaveOnly) { btnSaveOnly.disabled = true; }
+  // Crear pedido optimista para actualización inmediata en UI
+  let grupo_id = null;
+  if (!isEditMode && copiaPedidosActivosCliente.length > 0) {
+    const targetActivo = copiaPedidosActivosCliente[0];
+    grupo_id = targetActivo.grupo_id || targetActivo._docId || targetActivo.id;
+  }
 
-  try {
-    const notas = document.getElementById('pedido-notas')?.value || '';
+  const optimisticPedido = {
+    _docId: isEditMode ? targetEditingPedidoId : 'optimistic-' + Date.now(),
+    id_pedido: isEditMode ? (allPedidos.find(p => p._docId === targetEditingPedidoId)?.id_pedido || '...') : '...',
+    cliente_nombre: copiacliente.nombre.trim().toUpperCase(),
+    cliente_telefono: copiacliente.telefono,
+    cliente_id: copiacliente.docId || 'temp-id',
+    productos: copiaproductos.map(p => ({
+      id_producto: p.id_producto || 'temp-prod-id',
+      producto_tipo: p.producto_tipo,
+      cantidad: Number(p.cantidad) || 1,
+      precio_unitario: Number(p.precio_unitario) || 0,
+      detalle_personalizado: p.detalle_personalizado,
+      subtotal: (Number(p.cantidad) || 1) * (Number(p.precio_unitario) || 0)
+    })),
+    abonos: abonosFinales,
+    total_pagar: copiaproductos.reduce((sum, p) => sum + ((Number(p.cantidad) || 1) * (Number(p.precio_unitario) || 0)), 0),
+    total_abonado: abonosFinales.reduce((sum, ab) => sum + ab.monto, 0),
+    saldo_pendiente: Math.max(0, copiaproductos.reduce((sum, p) => sum + ((Number(p.cantidad) || 1) * (Number(p.precio_unitario) || 0)), 0) - abonosFinales.reduce((sum, ab) => sum + ab.monto, 0)),
+    estado_pago: abonosFinales.reduce((sum, ab) => sum + ab.monto, 0) >= copiaproductos.reduce((sum, p) => sum + ((Number(p.cantidad) || 1) * (Number(p.precio_unitario) || 0)), 0) ? 'PAGADO' : (abonosFinales.reduce((sum, ab) => sum + ab.monto, 0) > 0 ? 'PARCIAL' : 'SIN PAGO'),
+    estado_produccion: isEditMode ? (allPedidos.find(p => p._docId === targetEditingPedidoId)?.estado_produccion || 'PENDIENTE') : 'PENDIENTE',
+    fecha_creacion: {
+      toDate: () => new Date(),
+      seconds: Math.floor(Date.now() / 1000)
+    },
+    notas,
+    grupo_id: isEditMode ? (allPedidos.find(p => p._docId === targetEditingPedidoId)?.grupo_id || null) : grupo_id,
+    isOptimistic: true
+  };
 
-    let savedPedido = null;
-    if (editingPedidoId) {
-      await actualizarPedido(editingPedidoId, { productos, notas, abonos: abonosFinales, usuario: getCurrentUserProfile() });
-      closeSidebar();
-      showToast('Pedido actualizado', 'success');
-    } else {
-      let grupo_id = null;
-      if (pedidosActivosCliente.length > 0) {
-        const targetActivo = pedidosActivosCliente[0];
-        grupo_id = targetActivo.grupo_id || targetActivo._docId || targetActivo.id;
-      }
+  const originalAllPedidos = [...allPedidos];
 
-      savedPedido = await crearPedido({
-        cliente: {
-          docId: clienteState.docId,
-          nombre: clienteState.nombre,
-          telefono: clienteState.telefono,
-          isNew: clienteState.isNew
-        },
-        productos,
-        abonosIniciales: abonosFinales,
-        notas,
-        usuario: getCurrentUserProfile(),
-        grupo_id,
-        anticiposAplicados
-      });
+  // Insertar u optimizar en la lista local
+  if (isEditMode) {
+    const idx = allPedidos.findIndex(p => p._docId === targetEditingPedidoId);
+    if (idx !== -1) {
+      allPedidos[idx] = optimisticPedido;
+    }
+  } else {
+    allPedidos = [optimisticPedido, ...allPedidos];
+  }
 
-      // Si el pedido activo original al que nos unificamos no tenía un grupo_id asignado, lo actualizamos.
-      if (grupo_id && pedidosActivosCliente.length > 0) {
-        const targetActivo = pedidosActivosCliente[0];
-        if (!targetActivo.grupo_id) {
-          await actualizarGrupoPedido(targetActivo._docId, grupo_id);
+  // Renderizar la lista con el pedido optimista de inmediato
+  renderFilteredList();
+
+  // Cerrar y restablecer la barra lateral inmediatamente para mayor fluidez
+  closeSidebar();
+  resetSidebar();
+
+  showToast(isEditMode ? 'Actualizando pedido...' : 'Guardando pedido...', 'info');
+
+  // Ejecución en segundo plano
+  (async () => {
+    try {
+      if (isEditMode) {
+        await actualizarPedido(targetEditingPedidoId, {
+          productos: copiaproductos,
+          notas,
+          abonos: abonosFinales,
+          usuario: getCurrentUserProfile()
+        });
+        showToast('Pedido actualizado', 'success');
+      } else {
+        const savedPedido = await crearPedido({
+          cliente: copiacliente,
+          productos: copiaproductos,
+          abonosIniciales: abonosFinales,
+          notas,
+          usuario: getCurrentUserProfile(),
+          grupo_id,
+          anticiposAplicados: copiaAnticiposAplicados
+        });
+
+        // Si el pedido activo original al que nos unificamos no tenía un grupo_id asignado, lo actualizamos.
+        if (grupo_id && copiaPedidosActivosCliente.length > 0) {
+          const targetActivo = copiaPedidosActivosCliente[0];
+          if (!targetActivo.grupo_id) {
+            await actualizarGrupoPedido(targetActivo._docId, grupo_id);
+          }
         }
-      }
 
-      closeSidebar();
-      showToast('Pedido creado', 'success');
-      if (shouldPrintOnSave) {
-        if (savedPedido.grupo_id) {
-          try {
-            const activosDelGrupo = await obtenerPedidosActivosCliente(clienteState.docId);
-            const grupoPedidos = activosDelGrupo.filter(p => p.grupo_id === savedPedido.grupo_id || p._docId === savedPedido.grupo_id);
-            
-            if (grupoPedidos.length > 0) {
-              const principal = grupoPedidos.find(p => p._docId === savedPedido.grupo_id) || grupoPedidos[0];
-              const grupoObj = {
-                isGrupo: true,
-                grupo_id: savedPedido.grupo_id,
-                cliente_nombre: savedPedido.cliente_nombre,
-                cliente_telefono: savedPedido.cliente_telefono,
-                pedidos: grupoPedidos,
-                fecha_creacion: principal.fecha_creacion
-              };
-              imprimirReciboDirecto(grupoObj);
-            } else {
+        showToast('Pedido creado', 'success');
+
+        if (shouldPrintOnSave && savedPedido) {
+          if (savedPedido.grupo_id) {
+            try {
+              const activosDelGrupo = await obtenerPedidosActivosCliente(copiacliente.docId);
+              const grupoPedidos = activosDelGrupo.filter(p => p.grupo_id === savedPedido.grupo_id || p._docId === savedPedido.grupo_id);
+              
+              if (grupoPedidos.length > 0) {
+                const principal = grupoPedidos.find(p => p._docId === savedPedido.grupo_id) || grupoPedidos[0];
+                const grupoObj = {
+                  isGrupo: true,
+                  grupo_id: savedPedido.grupo_id,
+                  cliente_nombre: savedPedido.cliente_nombre,
+                  cliente_telefono: savedPedido.cliente_telefono,
+                  pedidos: grupoPedidos,
+                  fecha_creacion: principal.fecha_creacion
+                };
+                imprimirReciboDirecto(grupoObj);
+              } else {
+                imprimirReciboDirecto(savedPedido);
+              }
+            } catch (err) {
+              console.warn('Error al imprimir recibo de grupo, imprimiendo individual:', err);
               imprimirReciboDirecto(savedPedido);
             }
-          } catch {
+          } else {
             imprimirReciboDirecto(savedPedido);
           }
-        } else {
-          imprimirReciboDirecto(savedPedido);
         }
       }
+    } catch (err) {
+      // Revertir lista a su estado original si falla
+      allPedidos = originalAllPedidos;
+      renderFilteredList();
+      showToast('Error al guardar: ' + err.message, 'error');
     }
-
-    // Reset sidebar after a delay
-    const reloadTimer = setTimeout(() => {
-      try {
-        resetSidebar();
-      } catch { /* silent */ }
-    }, 3500);
-
-  } catch (err) {
-    showToast('Error al guardar: ' + err.message, 'error');
-  } finally {
-    saving = false;
-    if (btn) { btn.disabled = false; btn.innerHTML = editingPedidoId ? 'Actualizar Pedido' : 'Guardar e Imprimir'; }
-    if (btnSaveOnly) { btnSaveOnly.disabled = false; }
-    isUnificarModalOpen = false;
-    pedidosActivosCliente = [];
-  }
+  })();
 }
 
 

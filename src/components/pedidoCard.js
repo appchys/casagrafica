@@ -113,7 +113,7 @@ export function renderPedidoCard(pedido, options = {}) {
     }).join('');
 
     return `
-      <div class="pedido-card" data-doc-id="${pedido._docId}">
+      <div class="${pedido.isOptimistic ? 'pedido-card optimistic-saving' : 'pedido-card'}" data-doc-id="${pedido._docId}" style="${pedido.isOptimistic ? 'pointer-events: none; opacity: 0.6; animation: optimistic-pulse 1.5s infinite;' : ''}">
         <div style="display:flex; justify-content:space-between; align-items:center; padding-bottom: 8px; border-bottom: 2px solid var(--border); font-weight:700;">
           <div class="pedido-card-name" style="display:flex; align-items:center; gap:8px; font-size: 1rem; color: var(--text-primary);">
             <span>${pedido.cliente_nombre}</span>
@@ -173,7 +173,7 @@ export function renderPedidoCard(pedido, options = {}) {
     : '';
 
   return `
-    <div class="pedido-card" data-doc-id="${pedido._docId}">
+    <div class="${pedido.isOptimistic ? 'pedido-card optimistic-saving' : 'pedido-card'}" data-doc-id="${pedido._docId}" style="${pedido.isOptimistic ? 'pointer-events: none; opacity: 0.6; animation: optimistic-pulse 1.5s infinite;' : ''}">
       <div class="pedido-card-top">
         <div style="display:flex; align-items:center; gap:6px;">
           <span class="pedido-card-id">${pedido.id_pedido}</span>

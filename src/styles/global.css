@@ -2482,3 +2482,27 @@ a { color: var(--accent); text-decoration:none; }
   text-transform: uppercase !important;
 }
 
+/* Animación y estilo para tarjetas que se están guardando en segundo plano */
+.optimistic-saving {
+  position: relative;
+  background: var(--bg-card);
+  border-left: 4px solid var(--border) !important;
+  opacity: 0.6;
+  pointer-events: none;
+  animation: optimistic-pulse 1.5s infinite;
+  box-shadow: none !important;
+}
+
+@keyframes optimistic-pulse {
+  0% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 0.75;
+  }
+  100% {
+    opacity: 0.45;
+  }
+}
+
+

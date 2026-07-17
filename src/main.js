@@ -11,6 +11,7 @@ import { renderHistorial, bindHistorialEvents, cleanupHistorial } from './pages/
 import { renderCaja, bindCajaEvents, cleanupCaja } from './pages/caja.js';
 import { renderPorCobrar, bindPorCobrarEvents, cleanupPorCobrar } from './pages/por_cobrar.js';
 import { renderAnticipos, bindAnticiposEvents, cleanupAnticipos } from './pages/anticipos.js';
+import { renderClientes, bindClientesEvents, cleanupClientes } from './pages/clientes.js';
 import { obtenerUsuario } from './services/usuarios.service.js';
 import { escucharSesionActiva } from './services/caja.service.js';
 
@@ -144,6 +145,9 @@ function getRoute() {
   if (path.startsWith('/anticipos')) {
     return { page: 'anticipos', docId: null };
   }
+  if (path.startsWith('/clientes')) {
+    return { page: 'clientes', docId: null };
+  }
   return { page: 'pedidos', docId: null };
 }
 
@@ -169,6 +173,8 @@ function renderPage(user, profile) {
     authorized = permissions.includes('ver_por_cobrar');
   } else if (page === 'anticipos') {
     authorized = permissions.includes('crear_pedidos') || permissions.includes('editar_pedidos');
+  } else if (page === 'clientes') {
+    authorized = true;
   }
 
   // Redireccionar si no está autorizado
@@ -219,6 +225,8 @@ function renderPage(user, profile) {
     content = renderPorCobrar();
   } else if (page === 'anticipos') {
     content = renderAnticipos();
+  } else if (page === 'clientes') {
+    content = renderClientes();
   } else {
     content = renderPedidos();
   }
@@ -247,6 +255,9 @@ function renderPage(user, profile) {
   } else if (page === 'anticipos') {
     bindAnticiposEvents();
     currentCleanup = cleanupAnticipos;
+  } else if (page === 'clientes') {
+    bindClientesEvents();
+    currentCleanup = cleanupClientes;
   } else {
     bindPedidosEvents();
     currentCleanup = cleanupPedidos;

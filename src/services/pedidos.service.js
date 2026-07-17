@@ -227,6 +227,17 @@ export async function crearPedido({ cliente, productos, primerAbono, abonosInici
       grupo_id: grupo_id || null,
     };
 
+    // Incrementar total_pedidos del cliente
+    const clienteRef = doc(db, 'clientes', clienteId);
+    const clienteSnap = await transaction.get(clienteRef);
+    if (clienteSnap.exists()) {
+      const currentTotal = clienteSnap.data().total_pedidos || 0;
+      transaction.update(clienteRef, {
+        total_pedidos: currentTotal + 1,
+        updated_at: Timestamp.now()
+      });
+    }
+
     transaction.set(counterRef, { current_id: nextNum });
     transaction.set(docRef, pedido);
 
