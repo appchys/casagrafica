@@ -255,6 +255,25 @@ service cloud.firestore {
              ));
     }
 
+    function isValidNotificacionPedido(data) {
+      return              data.keys().hasAll(['pedido_id', 'id_pedido', 'tipo', 'leida', 'fecha', 'usuario', 'resumen', 'cambios']) &&
+             data.keys().hasOnly(['pedido_id', 'id_pedido', 'tipo', 'leida', 'fecha', 'usuario', 'resumen', 'cambios', 'pedido_eliminado', 'fecha_lectura']) &&
+             data.leida is bool &&
+             isValidString(data.pedido_id, 128) &&
+             isValidString(data.id_pedido, 128) &&
+             isValidString(data.tipo, 32) &&
+             data.fecha is timestamp &&
+             data.usuario != null &&
+             data.usuario.keys().hasAll(['uid', 'nombre', 'email']) &&
+             data.usuario.keys().hasOnly(['uid', 'nombre', 'email']) &&
+             isValidString(data.usuario.uid, 128) &&
+             isValidString(data.usuario.nombre, 128) &&
+             isValidString(data.usuario.email, 128) &&
+             isValidString(data.resumen, 2000) &&
+             data.cambios is list &&
+             (!('pedido_eliminado' in data) || data.pedido_eliminado == null || data.pedido_eliminado is map);
+    }
+
     // ===============================================================
     // Collection Rules
     // ===============================================================
@@ -349,6 +368,14 @@ service cloud.firestore {
       allow update: if isAuthenticated() && isValidAnticipo(request.resource.data) && (
         isAdmin() || hasPermission('gestionar_caja') || hasPermission('crear_pedidos') || hasPermission('editar_pedidos')
       );
+      allow delete: if isAdmin();
+    }
+
+    // Colección de notificaciones de cambios de pedidos
+    match /pedido_notificaciones/{notificacionId} {
+      allow read: if isAdmin();
+      allow create: if isAuthenticated() && isValidNotificacionPedido(request.resource.data);
+      allow update: if isAdmin();
       allow delete: if isAdmin();
     }
 

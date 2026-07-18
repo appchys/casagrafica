@@ -1212,7 +1212,8 @@ export function bindPedidosEvents() {
         const id = deletePedidoId;
         deletePedidoId = '';
         updateSidebarUI();
-        eliminarPedido(id).then(() => {
+        const perfil = getCurrentUserProfile();
+        eliminarPedido(id, perfil).then(() => {
           showToast('Pedido eliminado', 'info');
           loadPedidos();
         }).catch(() => showToast('Error al eliminar', 'error'));

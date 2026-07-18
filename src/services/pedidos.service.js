@@ -1,6 +1,6 @@
 import { db, storage } from '../firebase.js';
 import {
-  collection, doc, setDoc, getDoc, getDocs, updateDoc, deleteDoc,
+  collection, doc, setDoc, getDoc, getDocs, updateDoc, deleteDoc, addDoc,
   query, where, orderBy, onSnapshot, Timestamp, limit, runTransaction,
   arrayUnion, arrayRemove
 } from 'firebase/firestore';
@@ -494,6 +494,44 @@ export async function actualizarPedido(docId, { productos, notas, abonos, usuari
     estado_pago,
     updated_at: Timestamp.now(),
   });
+
+  try {
+    const cambios = [];
+    cambios.push({
+      campo: 'cliente',
+      anterior: { nombre: existing.cliente_nombre || '', telefono: existing.cliente_telefono || '' },
+      nuevo: { nombre: existing.cliente_nombre || '', telefono: existing.cliente_telefono || '' },
+    });
+    cambios.push({
+      campo: 'productos',
+      anterior: existing.productos || [],
+      nuevo: productosProcessed,
+    });
+
+    const resumenPartes = [];
+    const productosAnterior = Array.isArray(existing.productos) ? existing.productos.length : 0;
+    const productosNuevo = productosProcessed.length;
+    if (productosAnterior !== productosNuevo) {
+      resumenPartes.push(`Productos: ${productosAnterior} → ${productosNuevo}`);
+    } else {
+      resumenPartes.push(`Productos: ${productosNuevo}`);
+    }
+
+    const payload = {
+      pedido_id: docId,
+      id_pedido: existing.id_pedido || docId,
+      tipo: 'edicion',
+      leida: false,
+      fecha: Timestamp.now(),
+      usuario: usuario ? { uid: usuario.uid || '', nombre: usuario.nombre || '', email: usuario.email || '' } : { uid: 'sistema', nombre: 'Sistema', email: 'sistema@casagrafica.com' },
+      resumen: `Pedido ${existing.id_pedido || 'N/A'}: ${resumenPartes.join(' • ')}`,
+      cambios,
+    };
+
+    await addDoc(collection(db, 'pedido_notificaciones'), payload);
+  } catch (err) {
+    console.warn('No se pudo registrar la notificación del pedido:', err);
+  }
 }
 
 export async function obtenerPedidosRecientes(maxResults = 20) {
@@ -542,8 +580,32 @@ export function escucharPedidosRecientes(maxResults = 20, callback) {
   });
 }
 
-export async function eliminarPedido(docId) {
-  await deleteDoc(doc(db, COLECCION, docId));
+export async function eliminarPedido(docId, usuario = null) {
+  const docRef = doc(db, COLECCION, docId);
+  const snap = await getDoc(docRef);
+  if (!snap.exists()) return;
+
+  const pedidoData = snap.data();
+
+  try {
+    const payload = {
+      pedido_id: docId,
+      id_pedido: pedidoData.id_pedido || docId,
+      tipo: 'eliminado',
+      leida: false,
+      fecha: Timestamp.now(),
+      usuario: usuario || { uid: 'sistema', nombre: 'Sistema', email: 'sistema@casagrafica.com' },
+      resumen: `Pedido ${pedidoData.id_pedido || 'N/A'}: Pedido eliminado`,
+      cambios: [],
+      pedido_eliminado: pedidoData,
+    };
+
+    await addDoc(collection(db, 'pedido_notificaciones'), payload);
+  } catch (err) {
+    console.warn('No se pudo registrar la notificación de eliminación:', err);
+  }
+
+  await deleteDoc(docRef);
 }
 
 export async function adjuntarArchivoAPedido(pedidoId, file, usuario) {

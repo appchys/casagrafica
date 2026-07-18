@@ -15,12 +15,15 @@ import { renderClientes, bindClientesEvents, cleanupClientes } from './pages/cli
 import { renderNotificaciones, bindNotificacionesEvents, cleanupNotificaciones } from './pages/notificaciones.js';
 import { obtenerUsuario } from './services/usuarios.service.js';
 import { escucharSesionActiva } from './services/caja.service.js';
+import { escucharNotificacionesNoLeidas } from './services/notificaciones.service.js';
 
 const app = document.getElementById('app');
 let currentUser = null;
 let currentCleanup = null;
 let unsubscribeCajaStatus = null;
+let unsubscribeNotificaciones = null;
 let cajaAbiertaGlobal = false;
+let notificacionesNoLeidas = 0;
 
 // ════════════════════════════════
 // TOAST SYSTEM
@@ -216,7 +219,7 @@ function renderPage(user, profile) {
   }
 
   // Renderizar la navegación y contenido
-  const nav = renderNavbar(page, user.email, permissions, profile ? profile.nombre : '', cajaAbiertaGlobal);
+  const nav = renderNavbar(page, user.email, permissions, profile ? profile.nombre : '', cajaAbiertaGlobal, notificacionesNoLeidas);
   let content = '';
 
   if (page === 'taller') {
@@ -323,6 +326,18 @@ onAuthStateChanged(auth, async (user) => {
       });
     }
 
+    // Suscribir a notificaciones no leídas (bypass)
+    if (!unsubscribeNotificaciones) {
+      unsubscribeNotificaciones = escucharNotificacionesNoLeidas((count) => {
+        notificacionesNoLeidas = count;
+        const dot = document.getElementById('notif-status-dot');
+        if (dot) {
+          dot.style.display = count > 0 ? 'inline-block' : 'none';
+          dot.title = count > 0 ? `${count} notificación(es) sin leer` : '';
+        }
+      });
+    }
+
     if (window.location.pathname === '/' || window.location.pathname === '') {
       history.replaceState(null, '', '/pedidos');
     }
@@ -383,6 +398,18 @@ onAuthStateChanged(auth, async (user) => {
       });
     }
 
+    // Suscribir a notificaciones no leídas (producción)
+    if (!unsubscribeNotificaciones) {
+      unsubscribeNotificaciones = escucharNotificacionesNoLeidas((count) => {
+        notificacionesNoLeidas = count;
+        const dot = document.getElementById('notif-status-dot');
+        if (dot) {
+          dot.style.display = count > 0 ? 'inline-block' : 'none';
+          dot.title = count > 0 ? `${count} notificación(es) sin leer` : '';
+        }
+      });
+    }
+
     if (window.location.pathname === '/' || window.location.pathname === '') {
       history.replaceState(null, '', '/pedidos');
     }
@@ -393,7 +420,12 @@ onAuthStateChanged(auth, async (user) => {
       unsubscribeCajaStatus();
       unsubscribeCajaStatus = null;
     }
+    if (unsubscribeNotificaciones) {
+      unsubscribeNotificaciones();
+      unsubscribeNotificaciones = null;
+    }
     cajaAbiertaGlobal = false;
+    notificacionesNoLeidas = 0;
     if (currentCleanup) { currentCleanup(); currentCleanup = null; }
     renderLoginPage();
   }

@@ -176,7 +176,7 @@ export function renderPedidoCard(pedido, options = {}) {
     <div class="${pedido.isOptimistic ? 'pedido-card optimistic-saving' : 'pedido-card'}" data-doc-id="${pedido._docId}" style="${pedido.isOptimistic ? 'pointer-events: none; opacity: 0.6; animation: optimistic-pulse 1.5s infinite;' : ''}">
       <div class="pedido-card-top">
         <div style="display:flex; align-items:center; gap:6px;">
-          <span class="pedido-card-id">${pedido.id_pedido}</span>
+          <span class="pedido-card-id">#${pedido.id_pedido}</span>
         </div>
         <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; justify-content:flex-end;">
           <!-- Preservando diseño del indicador de estado para uso futuro:

@@ -1,7 +1,7 @@
 /**
  * Renders the top navigation bar (dark theme)
  */
-export function renderNavbar(currentPage, userEmail, permissions = [], userName = '', cajaAbierta = false) {
+export function renderNavbar(currentPage, userEmail, permissions = [], userName = '', cajaAbierta = false, notificacionesNoLeidas = 0) {
   const displayName = userName || (userEmail ? userEmail.split('@')[0] : 'Usuario');
   const initials = displayName.slice(0, 2).toUpperCase();
   
@@ -145,7 +145,10 @@ export function renderNavbar(currentPage, userEmail, permissions = [], userName 
             <span class="nav-icon" style="display:inline-flex; align-items:center;">
               <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg>
             </span>
-            <span class="nav-label">Notificaciones</span>
+            <span class="nav-label" style="display:inline-flex; align-items:center; width:100%; justify-content:space-between;">
+              Notificaciones
+              <span id="notif-status-dot" class="caja-status-dot" style="display:${notificacionesNoLeidas > 0 ? 'inline-block' : 'none'}; background-color:var(--info); box-shadow:0 0 8px var(--info);" title="${notificacionesNoLeidas > 0 ? `${notificacionesNoLeidas} notificación(es) sin leer` : ''}"></span>
+            </span>
           </a>
         </li>
         ` : ''}

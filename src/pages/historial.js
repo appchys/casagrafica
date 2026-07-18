@@ -274,7 +274,8 @@ function renderFilteredHistory() {
 async function handleDeletePedido(docId) {
   if (!confirm('¿Estás seguro de eliminar este pedido permanentemente?')) return;
   try {
-    await eliminarPedido(docId);
+    const perfil = getCurrentUserProfile();
+    await eliminarPedido(docId, perfil);
     showToast('Pedido eliminado', 'success');
   } catch (err) {
     showToast('Error al eliminar: ' + err.message, 'error');
