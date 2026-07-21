@@ -136,83 +136,11 @@ export function generarReciboHTML(pedido) {
 }
 
 /**
- * Triggers direct/silent printing via hidden iframe.
- * If the user's environment/extension supports silent printing on iframes,
- * it will bypass the dialog.
+ * Imprime el recibo utilizando el área de impresión del documento principal.
+ * Esto soluciona el bloqueo de impresión desde iframes ocultos en macOS (Safari y Chrome).
  */
 export function imprimirReciboDirecto(pedido) {
-  let iframe = document.getElementById('silent-print-iframe');
-  if (iframe) {
-    iframe.remove();
-  }
-
-  iframe = document.createElement('iframe');
-  iframe.id = 'silent-print-iframe';
-  iframe.style.position = 'fixed';
-  iframe.style.right = '0';
-  iframe.style.bottom = '0';
-  iframe.style.width = '0';
-  iframe.style.height = '0';
-  iframe.style.border = '0';
-  document.body.appendChild(iframe);
-
-  const doc = iframe.contentDocument || iframe.contentWindow.document;
-  const html = generarReciboHTML(pedido);
-
-  doc.open();
-  doc.write(`
-    <!DOCTYPE html>
-    <html>
-      <head>
-        <title>Imprimir Recibo</title>
-      </head>
-      <body>
-        <div id="print-area">${html}</div>
-      </body>
-    </html>
-  `);
-  doc.close();
-
-  // Clone active stylesheets to ensure print styles apply correctly inside the iframe
-  document.querySelectorAll('style, link[rel="stylesheet"]').forEach(el => {
-    doc.head.appendChild(el.cloneNode(true));
-  });
-
-  // Trigger print in the iframe after stylesheet injection and all images have loaded
-  const images = doc.querySelectorAll('img');
-  let loadedImagesCount = 0;
-  const totalImages = images.length;
-
-  const triggerPrint = () => {
-    setTimeout(() => {
-      try {
-        iframe.contentWindow.focus();
-        iframe.contentWindow.print();
-      } catch (e) {
-        console.error('Error al imprimir desde iframe:', e);
-      }
-    }, 150);
-  };
-
-  if (totalImages === 0) {
-    triggerPrint();
-  } else {
-    images.forEach(img => {
-      if (img.complete) {
-        loadedImagesCount++;
-        if (loadedImagesCount === totalImages) triggerPrint();
-      } else {
-        img.onload = () => {
-          loadedImagesCount++;
-          if (loadedImagesCount === totalImages) triggerPrint();
-        };
-        img.onerror = () => {
-          loadedImagesCount++;
-          if (loadedImagesCount === totalImages) triggerPrint();
-        };
-      }
-    });
-  }
+  imprimirRecibo(pedido);
 }
 
 /**
@@ -225,33 +153,38 @@ export function imprimirRecibo(pedido) {
 
   printArea.innerHTML = generarReciboHTML(pedido);
 
-  // Trigger print only after images have loaded to ensure the logo is present
   const images = printArea.querySelectorAll('img');
-  let loadedImagesCount = 0;
-  const totalImages = images.length;
+  let printed = false;
 
   const triggerPrint = () => {
+    if (printed) return;
+    printed = true;
     requestAnimationFrame(() => {
       window.print();
     });
   };
 
-  if (totalImages === 0) {
+  if (images.length === 0) {
     triggerPrint();
   } else {
+    // Temporizador de respaldo por si la carga de imágenes tarda o se detiene
+    const fallbackTimer = setTimeout(triggerPrint, 600);
+
+    let loadedCount = 0;
+    const checkAllLoaded = () => {
+      loadedCount++;
+      if (loadedCount >= images.length) {
+        clearTimeout(fallbackTimer);
+        triggerPrint();
+      }
+    };
+
     images.forEach(img => {
       if (img.complete) {
-        loadedImagesCount++;
-        if (loadedImagesCount === totalImages) triggerPrint();
+        checkAllLoaded();
       } else {
-        img.onload = () => {
-          loadedImagesCount++;
-          if (loadedImagesCount === totalImages) triggerPrint();
-        };
-        img.onerror = () => {
-          loadedImagesCount++;
-          if (loadedImagesCount === totalImages) triggerPrint();
-        };
+        img.onload = checkAllLoaded;
+        img.onerror = checkAllLoaded;
       }
     });
   }
